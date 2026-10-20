@@ -23,6 +23,7 @@ import { Magnetic } from "@/components/Magnetic";
 import { ReadyToArchitect } from "@/components/CTA";
 import { PortfolioProjectCard } from "@/components/PortfolioProjectCard";
 import WhatIfEditor from "@/components/WhatIfEditor";
+import { IntroReveal } from "@/components/IntroReveal";
 import {
   PROFILE,
   PROOF_STRIP,
@@ -68,10 +69,13 @@ export default function HomePage() {
       className="w-full relative min-h-screen flex flex-col items-center overflow-x-hidden pt-0"
       ref={containerRef}
     >
-      {/* ──────────────────────────────────────────────────────────── */}
-      {/* 1. IDENTITY & POSITIONING (HERO) */}
-      {/* ──────────────────────────────────────────────────────────── */}
-      <m.section
+      <IntroReveal />
+
+      <div className="existing-site-content w-full flex flex-col items-center">
+        {/* ──────────────────────────────────────────────────────────── */}
+        {/* 1. IDENTITY & POSITIONING (HERO) */}
+        {/* ──────────────────────────────────────────────────────────── */}
+        <m.section
         id="home"
         style={isDesktop ? { opacity: heroOpacity, scale: heroScale } : undefined}
         className="min-h-[92vh] flex flex-col items-center justify-center pt-28 pb-16 px-4 w-full max-w-5xl mx-auto text-center z-10"
@@ -534,6 +538,7 @@ export default function HomePage() {
       {/* 6. CLOSING & CONTACT (CTA WITH 3D PARTICLES) */}
       {/* ──────────────────────────────────────────────────────────── */}
       <ReadyToArchitect />
+      </div>
     </div>
   );
 }

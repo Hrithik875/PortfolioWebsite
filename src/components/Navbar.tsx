@@ -5,8 +5,10 @@ import { usePathname } from "next/navigation";
 import { Hexagon, Moon, Sun, Menu, X, ArrowUpRight } from "lucide-react";
 import { m, useScroll, useMotionValueEvent, AnimatePresence, useVelocity, Variants } from "framer-motion";
 import { useTheme } from "./ThemeProvider";
+import { useIntro } from "@/context/IntroContext";
 
 export function Navbar() {
+  const { introDone } = useIntro();
   const pathname = usePathname();
   const { scrollY } = useScroll();
   const scrollVelocity = useVelocity(scrollY);
@@ -25,7 +27,7 @@ export function Navbar() {
   const currentTheme = mounted ? resolvedTheme : "dark";
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!introDone) return;
     setMounted(true);
     const updateIsMobile = () => setIsMobile(window.innerWidth < 768);
     updateIsMobile();
@@ -36,16 +38,14 @@ export function Navbar() {
     return () => {
       window.removeEventListener("resize", updateIsMobile);
     };
-  }, []);
+  }, [introDone]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
     if (phase === "sphere") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsExpanded(false);
     }
   }, [phase]);
@@ -61,7 +61,7 @@ export function Navbar() {
   ];
 
   useMotionValueEvent(scrollY, "change", (latest) => {
-    if (!mounted) return;
+    if (!mounted || !introDone) return;
     if (isScrollingProgrammatically.current) {
       if (latest < 50) setPhase("top");
       else setPhase("pill");
@@ -77,6 +77,8 @@ export function Navbar() {
       else if (velocity < -10) { setPhase("pill"); }
     }
   });
+
+  if (!introDone) return null;
 
   const blur = isMobile ? "none" : "blur(20px)";
   const variants = {

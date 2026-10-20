@@ -2,9 +2,14 @@
 import { useEffect, type ReactNode } from "react";
 import { LazyMotion, domMax } from "framer-motion";
 import Lenis from "lenis";
+import { useIntro } from "@/context/IntroContext";
 
 export function LenisProvider({ children }: { children: ReactNode }) {
+  const { introDone } = useIntro();
+
   useEffect(() => {
+    if (!introDone) return;
+
     let lenis: Lenis | null = null;
     let rafId: number;
 
@@ -37,7 +42,7 @@ export function LenisProvider({ children }: { children: ReactNode }) {
       if (rafId) cancelAnimationFrame(rafId);
       lenis?.destroy();
     };
-  }, []);
+  }, [introDone]);
 
   // LazyMotion loads only the domAnimation feature set (~45 KB) instead of
   // the full framer-motion bundle (~65 KB). All m.* components in the app

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { IntroProvider } from "@/context/IntroContext";
 import { LenisProvider } from "@/components/LenisProvider";
 import { Navbar } from "@/components/Navbar";
 import { GlobalBackgroundLoader } from "@/components/GlobalBackgroundLoader";
@@ -32,22 +33,40 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="intro-loading">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                if (
+                  window.location.pathname !== '/' ||
+                  (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+                ) {
+                  document.documentElement.classList.remove('intro-loading');
+                }
+              } catch(e) {}
+            `,
+          }}
+        />
+      </head>
       <body suppressHydrationWarning className="relative antialiased min-h-screen flex flex-col bg-transparent text-[color:var(--text-primary)] overflow-x-hidden">
         <ThemeProvider>
-          <LenisProvider>
-            <GlobalBackgroundLoader />
+          <IntroProvider>
+            <LenisProvider>
+              <GlobalBackgroundLoader />
 
-            <Navbar />
+              <Navbar />
 
-            <main className="flex-1 w-full relative z-[1]">
-              <ErrorBoundary>
-                {children}
-              </ErrorBoundary>
-            </main>
+              <main className="flex-1 w-full relative z-[1]">
+                <ErrorBoundary>
+                  {children}
+                </ErrorBoundary>
+              </main>
 
-            <Footer />
-          </LenisProvider>
+              <Footer />
+            </LenisProvider>
+          </IntroProvider>
         </ThemeProvider>
       </body>
     </html>

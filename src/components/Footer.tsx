@@ -5,8 +5,12 @@ import Link from "next/link";
 import { Hexagon, ArrowUpRight } from "lucide-react";
 import { m, Variants } from "framer-motion";
 import { PROFILE } from "@/data/portfolio-data";
+import { useIntro } from "@/context/IntroContext";
 
 export function Footer() {
+  const { introDone } = useIntro();
+  if (!introDone) return null;
+
   const footerLinks = [
     {
       title: "Navigation",

@@ -101,6 +101,26 @@
   }
 }
 
+/* ── Preloader Flash Prevention & Scroll Lock ──────────────────────── */
+html.intro-loading {
+  overflow: hidden !important;
+}
+
+html.intro-loading body {
+  overflow: hidden !important;
+}
+
+html.intro-loading .existing-site-content {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+html.intro-loading .hero-rise,
+html.intro-loading .hero-rise-delay {
+  animation: none !important;
+}
+
 /* Glass Card */
 .glass-panel {
   background: var(--glass-bg);
