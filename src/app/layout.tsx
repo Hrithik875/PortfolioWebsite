@@ -23,7 +23,11 @@ export const metadata: Metadata = {
   description:
     "AI/ML engineering student at BMSCE building retrieval, streaming ML and evaluation systems with measured results. Projects, research methodology and leadership.",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: "/icon.png",
   },
 };
 
