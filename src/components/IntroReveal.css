@@ -1,0 +1,284 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap");
+
+.intro-reveal,
+.intro-reveal h1,
+.intro-reveal p,
+.intro-reveal .intro-title h1,
+.intro-reveal .outro-title h1,
+.intro-reveal .card h1,
+.intro-reveal .char,
+.intro-reveal .char span {
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+.intro-reveal {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.intro-reveal *,
+.intro-reveal *::before,
+.intro-reveal *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.intro-reveal.is-animating {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100svh;
+  z-index: 99999;
+  overflow: hidden;
+  background-color: #0a0a0a;
+}
+
+.intro-reveal.is-done {
+  position: relative;
+  width: 100%;
+  height: 100svh;
+  min-height: 100svh;
+  z-index: 10;
+  overflow: hidden;
+  background-color: #0a0a0a;
+}
+
+.intro-reveal img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.intro-reveal h1 {
+  text-transform: uppercase;
+  font-size: 6rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: normal;
+}
+
+.intro-reveal p {
+  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: normal;
+}
+
+.intro-reveal .intro-title .first-char,
+.intro-reveal .outro-title .char {
+  font-weight: 700;
+  will-change: transform, font-size;
+}
+
+.intro-reveal .preloader,
+.intro-reveal .split-overlay,
+.intro-reveal .tags-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100svh;
+  pointer-events: none;
+}
+
+.intro-reveal .preloader,
+.intro-reveal .split-overlay {
+  background-color: #0a0a0a;
+  color: #fff;
+}
+
+.intro-reveal .preloader,
+.intro-reveal .tags-overlay {
+  z-index: 2;
+}
+
+.intro-reveal .split-overlay {
+  z-index: 1;
+}
+
+.intro-reveal .intro-title {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  text-align: center;
+}
+
+.intro-reveal .outro-title {
+  position: absolute;
+  top: 50%;
+  left: calc(50% + 10rem);
+  transform: translate(-50%, -50%);
+}
+
+.intro-reveal .tag {
+  position: absolute;
+  width: max-content;
+  color: #5a5a5a;
+  overflow: hidden;
+}
+
+.intro-reveal .tag-1 {
+  top: 15%;
+  left: 15%;
+}
+
+.intro-reveal .tag-2 {
+  bottom: 15%;
+  left: 25%;
+}
+
+.intro-reveal .tag-3 {
+  bottom: 30%;
+  right: 15%;
+}
+
+.intro-reveal .container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  clip-path: polygon(0 48%, 0 48%, 0 52%, 0 52%);
+  z-index: 2;
+}
+
+.intro-reveal.is-done .container {
+  clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%) !important;
+}
+
+.intro-reveal .container .hero-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.intro-reveal footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 2em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #fff;
+  z-index: 2;
+}
+
+.intro-reveal .scroll-down-btn {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: opacity 0.2s ease;
+}
+
+.intro-reveal .scroll-down-btn:hover {
+  opacity: 0.75;
+}
+
+.intro-reveal .card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 30%;
+  height: 70%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #fff;
+  color: #000;
+  clip-path: polygon(0 50%, 100% 50%, 100% 50%, 0 50%);
+}
+
+.intro-reveal.is-done .card {
+  clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%) !important;
+}
+
+.intro-reveal .card h1 {
+  text-align: center;
+  width: 100%;
+  font-size: 3rem;
+  color: #000;
+}
+
+.intro-reveal .card .char span {
+  position: relative;
+  display: inline-block;
+  transform: translateY(100%);
+  will-change: transform;
+}
+
+.intro-reveal.is-done .card .char span,
+.intro-reveal.is-done .card h1 {
+  transform: translateY(0%) !important;
+}
+
+.intro-reveal .intro-title .char,
+.intro-reveal .outro-title .char,
+.intro-reveal .card .char {
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
+  overflow: hidden;
+}
+
+.intro-reveal .intro-title .char,
+.intro-reveal .outro-title .char {
+  margin-top: 0.75rem;
+}
+
+.intro-reveal .intro-title .char span,
+.intro-reveal .outro-title .char span,
+.intro-reveal .tag .word {
+  position: relative;
+  display: inline-block;
+  transform: translateY(-100%);
+  will-change: transform;
+}
+
+.intro-reveal .intro-title .first-char {
+  transform-origin: top left;
+}
+
+@media (max-width: 1000px) {
+  .intro-reveal h1 {
+    font-size: 2.5rem;
+  }
+
+  .intro-reveal .outro-title {
+    left: calc(50% + 4rem);
+  }
+
+  .intro-reveal .card {
+    width: 75%;
+  }
+
+  .intro-reveal .card h1 {
+    font-size: 2.5rem;
+  }
+
+  .intro-reveal .intro-title .char,
+  .intro-reveal .outro-title .char {
+    margin-top: 0.5rem;
+  }
+
+  .intro-reveal footer {
+    padding: 1.5em;
+  }
+}
