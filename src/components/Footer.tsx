@@ -2,7 +2,8 @@
 
 import React from "react";
 import Link from "next/link";
-import { Hexagon, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
+import { Logo } from "@/components/Logo";
 import { m, Variants } from "framer-motion";
 import { PROFILE } from "@/data/portfolio-data";
 import { useIntro } from "@/context/IntroContext";
@@ -127,7 +128,7 @@ export function Footer() {
       {/* Bottom Legal/Social Bar */}
       <div className="w-full px-6 md:px-16 pb-12 pt-12 border-t border-[color:var(--border)] flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-3">
-          <Hexagon size={24} className="text-[color:var(--text-primary)]" />
+          <Logo className="w-7 h-7" />
           <span className="font-bold text-lg tracking-tighter text-[color:var(--text-primary)]">HRITHIK.</span>
           <span className="text-xs text-[color:var(--text-secondary)] ml-2 hidden sm:inline">
             Receipts on every claim

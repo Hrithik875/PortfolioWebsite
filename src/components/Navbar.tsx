@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Hexagon, Moon, Sun, Menu, X, ArrowUpRight } from "lucide-react";
+import { Moon, Sun, Menu, X, ArrowUpRight } from "lucide-react";
+import { Logo } from "@/components/Logo";
 import { m, useScroll, useMotionValueEvent, AnimatePresence, useVelocity, Variants } from "framer-motion";
 import { useTheme } from "./ThemeProvider";
 import { useIntro } from "@/context/IntroContext";
@@ -162,7 +163,7 @@ export function Navbar() {
       <div className="md:hidden fixed top-0 left-0 w-full z-50 px-3 pt-3 pointer-events-none">
         <div className="pointer-events-auto mx-auto flex items-center justify-between gap-2 h-14 pl-4 pr-2.5 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)]/85 backdrop-blur-md shadow-lg shadow-black/10">
           <Link href="/" className="flex items-center gap-2 min-w-0 active:scale-95 transition-transform">
-            <Hexagon className="w-6 h-6 shrink-0 text-[color:var(--text-primary)]" />
+            <Logo className="w-7 h-7 shrink-0" priority />
             <span className="font-bold text-lg tracking-tighter truncate text-[color:var(--text-primary)]">
               Hrithik.
             </span>
@@ -231,7 +232,7 @@ export function Navbar() {
                     >
                       <Link href="/" className="flex items-center gap-2.5 group transition-transform active:scale-95">
                         <div className="w-9 h-9 flex items-center justify-center">
-                          <Hexagon className="text-[color:var(--text-primary)] w-7 h-7" />
+                          <Logo className="w-8 h-8" priority />
                         </div>
                         <span className="font-bold text-xl tracking-tighter whitespace-nowrap overflow-hidden pr-2 text-[color:var(--text-primary)]">
                           Hrithik.
@@ -383,7 +384,7 @@ export function Navbar() {
                 transition={{ duration: 0.3, ease: "easeOut" }}
                 className="absolute inset-0 flex items-center justify-center pointer-events-none"
               >
-                <Hexagon size={26} className="text-[color:var(--text-primary)]" />
+                <Logo className="w-7 h-7" priority />
               </m.div>
             )}
           </AnimatePresence>
