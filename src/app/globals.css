@@ -83,6 +83,7 @@
   html {
     background-color: var(--background);
     /* Lenis smooth scrolling handles behavior, avoid CSS smooth scroll conflict */
+    touch-action: pan-x pan-y;
   }
 
   body {
@@ -92,6 +93,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
+    touch-action: pan-x pan-y;
   }
 
   /* Make headings use Space Grotesk if available */

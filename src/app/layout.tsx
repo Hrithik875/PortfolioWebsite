@@ -7,12 +7,14 @@ import { Navbar } from "@/components/Navbar";
 import { GlobalBackgroundLoader } from "@/components/GlobalBackgroundLoader";
 import { Footer } from "@/components/Footer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { PreventZoom } from "@/components/PreventZoom";
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 5,
-  userScalable: true,
+  maximumScale: 1,
+  minimumScale: 1,
+  userScalable: false,
 };
 
 export const metadata: Metadata = {
@@ -50,11 +52,24 @@ export default function RootLayout({
                   document.documentElement.classList.remove('intro-loading');
                 }
               } catch(e) {}
+
+              // Early zoom prevention before hydration
+              try {
+                window.addEventListener('wheel', function(e) {
+                  if (e.ctrlKey || e.metaKey) e.preventDefault();
+                }, { passive: false, capture: true });
+                window.addEventListener('keydown', function(e) {
+                  if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=' || e.key === '_' || e.key === '0')) {
+                    e.preventDefault();
+                  }
+                }, { capture: true });
+              } catch(e) {}
             `,
           }}
         />
       </head>
       <body suppressHydrationWarning className="relative antialiased min-h-screen flex flex-col bg-transparent text-[color:var(--text-primary)] overflow-x-hidden">
+        <PreventZoom />
         <ThemeProvider>
           <IntroProvider>
             <LenisProvider>
