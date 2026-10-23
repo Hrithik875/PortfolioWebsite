@@ -18,6 +18,20 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
+// Mock CSS.supports for jsdom
+if (typeof window.CSS === "undefined") {
+  (window as unknown as { CSS: { supports: () => boolean } }).CSS = { supports: vi.fn().mockReturnValue(true) };
+} else if (typeof window.CSS.supports === "undefined") {
+  window.CSS.supports = vi.fn().mockReturnValue(true);
+}
+
+// Mock ResizeObserver for jsdom
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 // Mock IntroContext
 vi.mock("@/context/IntroContext", () => ({
   useIntro: () => ({
