@@ -9,20 +9,20 @@ import { useTheme } from "./ThemeProvider";
 import { useIntro } from "@/context/IntroContext";
 
 /* ════════════════════════════════════════════════════════════════════════════
-   LIQUID GLASS NAVBAR
+   LIQUID GLASS NAVBAR  (look + behaviour modelled on the "liquid glass switcher")
 
-   • ONE glass engine drives desktop pill, theme drop, the sliding selection
-     lens and the mobile bar, so every surface looks identical:
-       1. backdrop is blurred + saturated,
-       2. the rim bends the backdrop like a convex lens (SVG displacement map),
-          with chromatic aberration (R / G / B bent by different amounts),
-       3. a tone curve keeps whatever is behind it readable for the text,
-       4. a light tint, inner glow and a diagonal specular rim sit on top.
-   • The pill, logo sphere and theme drop are ONE SVG path rewritten every frame
-     from spring values. Content only moves with transform / opacity.
-   • The selection lens is its own small glass shape that slides between menu
-     items: its leading edge moves first, the trailing edge follows, so it
-     stretches and then settles like a drop of water.
+   Glass recipe (same on the desktop pill, the theme drop and the mobile bar):
+     • light glass tint (12% of #bbbbbc, constant, like the reference)
+     • backdrop-filter: blur(8px) -> edge refraction (SVG displacement map)
+       -> saturate(150%)
+     • a stack of inset box-shadows: light + dark reflections on the rim and a
+       soft drop shadow under the glass
+   Active item: a tinted glass pill that slides behind the text, always inside
+   the bar. It slides with 400ms cubic-bezier(1, 0, .4, 1) and stretches
+   (scaleX 1 -> 1.1 -> 1) from the side it is travelling toward.
+
+   Load sequence: glass stays invisible until tiles are decoded + theme is
+   resolved -> glass fades in as the sphere -> pill stretches out.
    ════════════════════════════════════════════════════════════════════════════ */
 
 type Phase = "top" | "pill" | "sphere";
@@ -30,57 +30,48 @@ type Controls = { stop: () => void };
 type RGBA = [number, number, number, number];
 
 /* ── Layout tunables ─────────────────────────────────────────────────────── */
-const CANVAS_W = 1400; // drawing area of the main liquid shape (centered on page)
+const CANVAS_W = 1400; // drawing area of the liquid shape (centered on page)
 const CANVAS_H = 104;
 const OX = CANVAS_W / 2; // x = 0 (page center) inside the canvas
 const CY = 52; // vertical center of pill + drop (top edge of the 64px pill = 20px)
 const SEP_D = 78; // resting distance: pill right-cap center -> drop center
 const EDGE_PAD = 22; // inner padding of the pill for logo / buttons
+const HL_PAD = 2; // highlighter extends this far past the active link on each side
+const HL_INSET = 26; // highlighter is this much shorter than the bar (13px top + 13px bottom)
+const INTRO_DELAY = 450; // ms between the sphere appearing and the pill stretching out
+const GLASS_FADE = "opacity .5s cubic-bezier(1, 0, 0.4, 1)";
 
-const LENS_W = 640; // drawing area of the selection lens (centered)
-const LENS_OX = LENS_W / 2;
-const LENS_H = 68; // slightly taller than the pill, like the iOS tab-bar lens
-const LENS_PAD = 26; // extra width on each side of the active link
-
-/* ── Glass tunables (shared by desktop, lens and mobile) ─────────────────────
-   Names follow the reference LiquidGlass component:
-   bevel ~ bezel, scale ~ maxDisp, aberration, tint.                          */
-const ENABLE_REFRACTION = true; // false = frost + rim light only (no bending)
+/* ── Glass tunables ──────────────────────────────────────────────────────── */
+const ENABLE_REFRACTION = true; // false = frost + rim only (no edge bending)
+const TONE_MAP = false; // false = exact reference look. true = legibility tone curves (darkens/lifts backdrop)
 type Profile = { bezel: number; maxDisp: number; power: number };
 const GLASS = {
-  blur: 6, // px of frost under the glass
-  saturate: 1.5,
-  aberration: 0.14, // 0 = none. R bends 14% more than G, B 14% less.
-  main: { bezel: 0.62, maxDisp: 22, power: 2.3 } as Profile, // pill, drop, mobile bar
-  lens: { bezel: 0.7, maxDisp: 26, power: 2.1 } as Profile, // selection lens
-  lensBlur: 0.8,
-  /* Tone curves (11 knots, input 0..1 -> output). They only touch the problem
-     colours: dark theme caps highlights so light text always has a dark enough
-     base; light theme lifts shadows so dark text always has a light enough base.
-     Mid-tones and saturated colours keep their life.                          */
-  curveDark: [0, 0.08, 0.16, 0.23, 0.3, 0.35, 0.39, 0.41, 0.43, 0.44, 0.45],
-  curveLight: [0.62, 0.66, 0.7, 0.74, 0.78, 0.82, 0.86, 0.9, 0.94, 0.97, 1],
+  blur: 8, // px, same as the reference
+  saturate: "150%",
+  preBlur: 2, // px, small extra softening of the refracted backdrop (reference: feGaussianBlur)
+  aberration: 0, // 0 = clean edge like the reference. Try 0.12 for a rainbow fringe.
+  main: { bezel: 0.55, maxDisp: 18, power: 2.2 } as Profile, // edge bending profile
+  /* Only used when TONE_MAP = true */
+  curveDark: [0, 0.07, 0.14, 0.2, 0.26, 0.3, 0.34, 0.36, 0.38, 0.39, 0.4],
+  curveLight: [0.5, 0.54, 0.58, 0.63, 0.69, 0.75, 0.81, 0.87, 0.92, 0.96, 1],
 };
 
 const SIZE_SPRING = { type: "spring" as const, stiffness: 200, damping: 27, mass: 1, restDelta: 0.05, restSpeed: 0.05 };
 const LOOK_SPRING = { type: "spring" as const, stiffness: 120, damping: 24, restDelta: 0.002, restSpeed: 0.002 };
+const SLIDE = { duration: 0.4, ease: [1, 0, 0.4, 1] as [number, number, number, number] };
 
-/* Tint laid over the glass, per phase (top, pill, sphere) */
+/* Glass tint per phase (top, pill, sphere). Reference: --c-glass (#bbbbbc) at 12%, always. */
 const LOOKS: Record<"dark" | "light", RGBA[]> = {
   dark: [
-    [14, 14, 16, 0.18],
-    [14, 14, 16, 0.22],
-    [18, 18, 22, 0.3],
+    [187, 187, 188, 0.12],
+    [187, 187, 188, 0.12],
+    [187, 187, 188, 0.12],
   ],
   light: [
-    [255, 255, 255, 0.2],
-    [255, 255, 255, 0.24],
-    [255, 255, 255, 0.32],
+    [187, 187, 188, 0.12],
+    [187, 187, 188, 0.12],
+    [187, 187, 188, 0.12],
   ],
-};
-const LENS_FILL: Record<"dark" | "light", RGBA> = {
-  dark: [255, 255, 255, 0.08],
-  light: [255, 255, 255, 0.3],
 };
 
 const mix = (a: RGBA, b: RGBA, t: number): RGBA => [
@@ -90,14 +81,13 @@ const mix = (a: RGBA, b: RGBA, t: number): RGBA => [
   a[3] + (b[3] - a[3]) * t,
 ];
 const rgba = (c: RGBA) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${c[3].toFixed(3)})`;
-const withBoost = (c: RGBA, boost: number): RGBA => [c[0], c[1], c[2], Math.min(1, c[3] + boost)];
 
-/* ── Edge refraction maps (Chromium only; others get frost + rim light) ──────
-   Drawn once from small tiles. Each pixel stores a vector pointing from the
+/* ── Edge refraction map (Chromium only; others get frost + rim) ─────────────
+   Built once from small tiles. Every pixel stores a vector pointing from the
    glass edge toward its centre, strongest at the edge, so the background looks
-   bent along the rim like a convex water slab.                               */
+   bent along the rim. The tiles are placed on the live shape every frame, so
+   the bend always hugs the real edge, whatever the width.                   */
 type TileKind = "capL" | "capR" | "strip" | "disc";
-type ProfileName = "main" | "lens";
 const MAP_S = 2; // supersampling
 const REF_R = 32; // reference radius the tiles are drawn at
 
@@ -140,12 +130,11 @@ function makeTileData(kind: TileKind, P: Profile): { w: number; h: number; data:
   return { w, h, data };
 }
 
-const tileCache: Record<string, HTMLCanvasElement | undefined> = {};
-function tileCanvas(kind: TileKind, name: ProfileName): HTMLCanvasElement | null {
-  const key = `${name}:${kind}`;
-  const hit = tileCache[key];
+const tileCache: Partial<Record<TileKind, HTMLCanvasElement>> = {};
+function tileCanvas(kind: TileKind): HTMLCanvasElement | null {
+  const hit = tileCache[kind];
   if (hit) return hit;
-  const { w, h, data } = makeTileData(kind, GLASS[name]);
+  const { w, h, data } = makeTileData(kind, GLASS.main);
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
@@ -154,15 +143,15 @@ function tileCanvas(kind: TileKind, name: ProfileName): HTMLCanvasElement | null
   const img = ctx.createImageData(w, h);
   img.data.set(data);
   ctx.putImageData(img, 0, 0);
-  tileCache[key] = c;
+  tileCache[kind] = c;
   return c;
 }
 
 /* A full stadium map of any size (used by the mobile bar). */
 function composeStadiumMap(w: number, h: number): string | null {
-  const strip = tileCanvas("strip", "main");
-  const capL = tileCanvas("capL", "main");
-  const capR = tileCanvas("capR", "main");
+  const strip = tileCanvas("strip");
+  const capL = tileCanvas("capL");
+  const capR = tileCanvas("capR");
   if (!strip || !capL || !capR) return null;
   const S = 2;
   const c = document.createElement("canvas");
@@ -184,11 +173,11 @@ type TileEls = {
   strip: SVGFEImageElement | null;
   capL: SVGFEImageElement | null;
   capR: SVGFEImageElement | null;
-  disc?: SVGFEImageElement | null;
+  disc: SVGFEImageElement | null;
 };
-/* Moves the map tiles to the live shape (attribute writes only, no layout). */
+/* Moves the map tiles onto the live shape (attribute writes only, no layout). */
 function placeTiles(fi: TileEls, left: number, w: number, R: number, cy: number) {
-  const place = (el: SVGFEImageElement | null | undefined, x: number, wd: number) => {
+  const place = (el: SVGFEImageElement | null, x: number, wd: number) => {
     if (!el) return;
     el.setAttribute("x", x.toFixed(2));
     el.setAttribute("y", (cy - R).toFixed(2));
@@ -200,18 +189,7 @@ function placeTiles(fi: TileEls, left: number, w: number, R: number, cy: number)
   place(fi.capR, left + w - R, R);
 }
 
-function stadiumPath(w: number, h: number, ox: number, cy: number): string {
-  const R = h / 2;
-  const xl = ox - w / 2 + R;
-  const xr = ox + w / 2 - R;
-  const f = (n: number) => Math.round(n * 100) / 100;
-  return (
-    `M${f(xl)} ${f(cy - R)}H${f(xr)}A${f(R)} ${f(R)} 0 0 1 ${f(xr)} ${f(cy + R)}` +
-    `H${f(xl)}A${f(R)} ${f(R)} 0 0 1 ${f(xl)} ${f(cy - R)}Z`
-  );
-}
-
-/* Chromium can bend the backdrop with an SVG filter. Safari / Firefox get frost + rim light only. */
+/* Chromium can bend the backdrop with an SVG filter. Safari / Firefox get frost + rim only. */
 function canRefract(): boolean {
   const nav = navigator as Navigator & {
     userAgentData?: { brands: { brand: string }[] };
@@ -231,94 +209,122 @@ function canBackdrop(): boolean {
   );
 }
 
-/* Backdrop recipes. With the SVG chain: frost -> bend rim -> tone curve.
-   Without it: frost + brightness (still readable, just less vivid).          */
-const fallbackBackdrop = (theme: "dark" | "light") =>
-  `blur(10px) saturate(1.6) brightness(${theme === "dark" ? 0.55 : 1.1})`;
-const chainBackdrop = (id: string) => `blur(${GLASS.blur}px) saturate(${GLASS.saturate}) url(#${id})`;
-const lensBackdrop = (on: boolean, theme: "dark" | "light") =>
-  on
-    ? `blur(${GLASS.lensBlur}px) saturate(1.35) brightness(${theme === "dark" ? 1.12 : 1.04}) url(#lg-lens)`
-    : `blur(2px) saturate(1.3) brightness(1.08)`;
+/* Builds + DECODES every edge-map tile before the glass is shown, so the filter
+   never renders a frame without its map (that was part of the load glitch). */
+async function prepareGlass(): Promise<{ boost: number; urls: Record<TileKind, string> | null }> {
+  const contrast = window.matchMedia("(prefers-contrast: more)").matches;
+  const lowTransparency = window.matchMedia("(prefers-reduced-transparency: reduce)").matches;
+  const ok = canRefract();
+  const boost = (canBackdrop() ? 0 : 0.28) + (contrast ? 0.18 : 0) + (lowTransparency ? 0.55 : 0) + (ok ? 0 : 0.18);
+  if (!ok) return { boost, urls: null };
 
+  const kinds: TileKind[] = ["disc", "strip", "capL", "capR"];
+  const urls: Partial<Record<TileKind, string>> = {};
+  for (const k of kinds) {
+    const c = tileCanvas(k);
+    if (!c) return { boost, urls: null };
+    urls[k] = c.toDataURL("image/png");
+  }
+  const decode = (url: string) => {
+    const img = new Image();
+    img.src = url;
+    return img.decode ? img.decode().catch(() => undefined) : Promise.resolve();
+  };
+  await Promise.race([
+    Promise.all(kinds.map((k) => decode(urls[k] as string))),
+    new Promise((r) => setTimeout(r, 800)),
+  ]);
+  return { boost, urls: urls as Record<TileKind, string> };
+}
+
+/* Backdrop recipes. Reference order: blur -> refraction -> saturate.
+   Without the SVG chain: frost + brightness (still readable, less vivid).    */
+const chainBackdrop = (id: string) => `blur(${GLASS.blur}px) url(#${id}) saturate(${GLASS.saturate})`;
+const fallbackBackdrop = (theme: "dark" | "light") =>
+  `blur(${GLASS.blur}px) saturate(${GLASS.saturate}) brightness(${theme === "dark" ? 0.55 : 1.1})`;
+
+/* Glass rim + highlighter styling: the same box-shadow stacks as the reference. */
 const GLASS_CSS = `
+[data-lg]{--c-glass:#bbbbbc;--c-light:#fff;--c-dark:#000}
+[data-lg="light"]{--glass-reflex-dark:1;--glass-reflex-light:1}
+[data-lg="dark"]{--glass-reflex-dark:2;--glass-reflex-light:.3}
+
+.lg-shade{
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb,var(--c-light) calc(var(--glass-reflex-light) * 10%),transparent),
+    inset 1.8px 3px 0px -2px color-mix(in srgb,var(--c-light) calc(var(--glass-reflex-light) * 90%),transparent),
+    inset -2px -2px 0px -2px color-mix(in srgb,var(--c-light) calc(var(--glass-reflex-light) * 80%),transparent),
+    inset -3px -8px 1px -6px color-mix(in srgb,var(--c-light) calc(var(--glass-reflex-light) * 60%),transparent),
+    inset -0.3px -1px 4px 0px color-mix(in srgb,var(--c-dark) calc(var(--glass-reflex-dark) * 12%),transparent),
+    inset -1.5px 2.5px 0px -2px color-mix(in srgb,var(--c-dark) calc(var(--glass-reflex-dark) * 20%),transparent),
+    inset 0px 3px 4px -2px color-mix(in srgb,var(--c-dark) calc(var(--glass-reflex-dark) * 20%),transparent),
+    inset 2px -6.5px 1px -4px color-mix(in srgb,var(--c-dark) calc(var(--glass-reflex-dark) * 10%),transparent),
+    0px 1px 5px 0px color-mix(in srgb,var(--c-dark) calc(var(--glass-reflex-dark) * 10%),transparent),
+    0px 6px 16px 0px color-mix(in srgb,var(--c-dark) calc(var(--glass-reflex-dark) * 8%),transparent);
+}
+.lg-hl{
+  background-color:color-mix(in srgb,var(--c-glass) 36%,transparent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb,var(--c-light) calc(var(--glass-reflex-light) * 10%),transparent),
+    inset 2px 1px 0px -1px color-mix(in srgb,var(--c-light) calc(var(--glass-reflex-light) * 90%),transparent),
+    inset -1.5px -1px 0px -1px color-mix(in srgb,var(--c-light) calc(var(--glass-reflex-light) * 80%),transparent),
+    inset -2px -6px 1px -5px color-mix(in srgb,var(--c-light) calc(var(--glass-reflex-light) * 60%),transparent),
+    inset -1px 2px 3px -1px color-mix(in srgb,var(--c-dark) calc(var(--glass-reflex-dark) * 20%),transparent),
+    inset 0px -4px 1px -2px color-mix(in srgb,var(--c-dark) calc(var(--glass-reflex-dark) * 10%),transparent),
+    0px 3px 6px 0px color-mix(in srgb,var(--c-dark) calc(var(--glass-reflex-dark) * 8%),transparent);
+}
+
+/* Link text. The label reserves the BOLD width so switching the active item never
+   changes the width of the link row (that used to interrupt the highlighter slide). */
 .lg-link{color:var(--text-primary);color:color-mix(in srgb,var(--text-primary) 82%,transparent);transition:color .25s ease}
 .lg-link:hover,.lg-link-active{color:var(--text-primary)}
 .lg-link-active{font-weight:700}
-.lg-ink[data-lg="dark"]{text-shadow:0 1px 2px rgba(0,0,0,.45),0 0 12px rgba(0,0,0,.3)}
-.lg-ink[data-lg="dark"] svg.lucide{filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
-.lg-ink[data-lg="light"]{text-shadow:0 1px 1px rgba(255,255,255,.55),0 0 10px rgba(255,255,255,.4)}
-.lg-ink[data-lg="light"] svg.lucide{filter:drop-shadow(0 1px 1px rgba(255,255,255,.65))}
+.lg-label{display:inline-flex;flex-direction:column;align-items:center}
+.lg-label::after{content:attr(data-label);font-weight:700;height:0;overflow:hidden;visibility:hidden;pointer-events:none;user-select:none}
+
+/* Text stays readable on any background: very soft halo opposite to the text tone */
+.lg-ink[data-lg="dark"]{text-shadow:0 1px 2px rgba(0,0,0,.25)}
+.lg-ink[data-lg="dark"] svg.lucide{filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
+.lg-ink[data-lg="light"]{text-shadow:0 1px 1px rgba(255,255,255,.35)}
+.lg-ink[data-lg="light"] svg.lucide{filter:drop-shadow(0 1px 1px rgba(255,255,255,.4))}
 .lg-ink .lg-noink,.lg-ink .lg-noink *{text-shadow:none}
 .lg-ink .lg-noink svg.lucide{filter:none}
 `;
 
-/* Three-channel bend (chromatic aberration) + optional tone curve. Reads "map". */
-function bendChain(scale: number, curve: number[] | null) {
+/* Edge bend (+ optional rainbow fringe) (+ optional tone curve). Reads the "map" result. */
+function bendChain(scale: number, curve: number[]) {
   const ab = GLASS.aberration;
+  const table = curve.join(" ");
+  const pre = <feGaussianBlur in="SourceGraphic" stdDeviation={GLASS.preBlur} result="src" />;
+  const tone = TONE_MAP ? (
+    <feComponentTransfer in="bent">
+      <feFuncR type="table" tableValues={table} />
+      <feFuncG type="table" tableValues={table} />
+      <feFuncB type="table" tableValues={table} />
+    </feComponentTransfer>
+  ) : null;
+  if (ab <= 0) {
+    return (
+      <>
+        {pre}
+        <feDisplacementMap in="src" in2="map" scale={scale} xChannelSelector="R" yChannelSelector="G" result="bent" />
+        {tone}
+      </>
+    );
+  }
   const keep = (r: number, g: number, b: number) => `${r} 0 0 0 0  0 ${g} 0 0 0  0 0 ${b} 0 0  0 0 0 1 0`;
   return (
     <>
-      <feDisplacementMap in="SourceGraphic" in2="map" scale={scale * (1 + ab)} xChannelSelector="R" yChannelSelector="G" result="dR" />
+      {pre}
+      <feDisplacementMap in="src" in2="map" scale={scale * (1 + ab)} xChannelSelector="R" yChannelSelector="G" result="dR" />
       <feColorMatrix in="dR" type="matrix" values={keep(1, 0, 0)} result="cR" />
-      <feDisplacementMap in="SourceGraphic" in2="map" scale={scale} xChannelSelector="R" yChannelSelector="G" result="dG" />
+      <feDisplacementMap in="src" in2="map" scale={scale} xChannelSelector="R" yChannelSelector="G" result="dG" />
       <feColorMatrix in="dG" type="matrix" values={keep(0, 1, 0)} result="cG" />
-      <feDisplacementMap in="SourceGraphic" in2="map" scale={scale * (1 - ab)} xChannelSelector="R" yChannelSelector="G" result="dB" />
+      <feDisplacementMap in="src" in2="map" scale={scale * (1 - ab)} xChannelSelector="R" yChannelSelector="G" result="dB" />
       <feColorMatrix in="dB" type="matrix" values={keep(0, 0, 1)} result="cB" />
       <feBlend in="cR" in2="cG" mode="screen" result="rg" />
-      <feBlend in="rg" in2="cB" mode="screen" result={curve ? "bent" : undefined} />
-      {curve && (
-        <feComponentTransfer in="bent">
-          <feFuncR type="table" tableValues={curve.join(" ")} />
-          <feFuncG type="table" tableValues={curve.join(" ")} />
-          <feFuncB type="table" tableValues={curve.join(" ")} />
-        </feComponentTransfer>
-      )}
-    </>
-  );
-}
-
-/* Tint, inner glow and diagonal specular rim: identical on every surface. */
-function GlassPaint(props: {
-  id: string;
-  theme: "dark" | "light";
-  lens?: boolean;
-  d?: string;
-  fill?: string;
-  pathRef?: React.Ref<SVGPathElement>;
-  fillRef?: React.Ref<SVGUseElement>;
-}) {
-  const { id, theme, lens, d, fill, pathRef, fillRef } = props;
-  const dark = theme === "dark";
-  const rim = lens ? [0.95, 0.42, 0.1, 0.42, 0.9] : [0.85, 0.3, 0.07, 0.3, 0.8];
-  const glowTop = lens ? (dark ? 0.2 : 0.5) : dark ? 0.14 : 0.4;
-  const glowBot = lens ? (dark ? 0.14 : 0.14) : dark ? 0.09 : 0.1;
-  const botColor = dark ? "#fff" : "#000";
-  const shape = `#${id}-shape`;
-  return (
-    <>
-      <defs>
-        <path id={`${id}-shape`} ref={pathRef} d={d ?? ""} />
-        <clipPath id={`${id}-clip`}>
-          <use href={shape} />
-        </clipPath>
-        <linearGradient id={`${id}-rim`} x1="0" y1="0" x2="1" y2="1">
-          {[0, 0.16, 0.5, 0.84, 1].map((o, i) => (
-            <stop key={o} offset={o} stopColor="#fff" stopOpacity={rim[i]} />
-          ))}
-        </linearGradient>
-        <linearGradient id={`${id}-glow`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fff" stopOpacity={glowTop} />
-          <stop offset="0.3" stopColor="#fff" stopOpacity={0} />
-          <stop offset="0.7" stopColor={botColor} stopOpacity={0} />
-          <stop offset="1" stopColor={botColor} stopOpacity={glowBot} />
-        </linearGradient>
-      </defs>
-      <use ref={fillRef} href={shape} style={fill ? { fill } : undefined} />
-      <use href={shape} fill="none" stroke={`url(#${id}-glow)`} strokeWidth={18} clipPath={`url(#${id}-clip)`} />
-      <use href={shape} fill="none" stroke={`url(#${id}-glow)`} strokeWidth={8} clipPath={`url(#${id}-clip)`} />
-      <use href={shape} fill="none" stroke={dark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.18)"} strokeWidth={1} />
-      <use href={shape} fill="none" stroke={`url(#${id}-rim)`} strokeWidth={1.6} />
+      <feBlend in="rg" in2="cB" mode="screen" result="bent" />
+      {tone}
     </>
   );
 }
@@ -400,6 +406,10 @@ function buildLiquidPath(w: number, h: number, D: number, nu: number): string {
   );
 }
 
+/* The clip the glass layer must have from its very first paint (the 60px sphere).
+   Without it the layer is an unclipped 1400x104 rectangle until the first draw. */
+const INITIAL_PATH = buildLiquidPath(60, 60, 0, 1);
+
 const phaseForScroll = (y: number): Phase => (y >= 250 ? "sphere" : y >= 50 ? "pill" : "top");
 
 const NAV_LINKS = [
@@ -410,10 +420,7 @@ const NAV_LINKS = [
   { name: "About", href: "/about" },
 ];
 
-type TileUrls = {
-  main: Record<TileKind, string>;
-  lens: Record<"strip" | "capL" | "capR", string>;
-};
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 export function Navbar() {
   const { introDone } = useIntro();
@@ -422,15 +429,18 @@ export function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("sphere");
   const [refract, setRefract] = useState(false);
-  const [tiles, setTiles] = useState<TileUrls | null>(null);
+  const [tiles, setTiles] = useState<Record<TileKind, string> | null>(null);
   const [mobileMap, setMobileMap] = useState<{ url: string; w: number; h: number } | null>(null);
   const [boost, setBoost] = useState(0);
+  const [glassReady, setGlassReady] = useState(false); // glass is built, decoded and may fade in
+  const [pendingIdx, setPendingIdx] = useState<number | null>(null); // optimistic active item (set on click)
 
   const { setTheme, resolvedTheme } = useTheme();
   const currentTheme = mounted ? resolvedTheme : "dark";
   const expanded = phase !== "sphere";
   const glassTheme: "dark" | "light" = currentTheme === "light" ? "light" : "dark";
-  const activeIdx = NAV_LINKS.findIndex((l) => pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href)));
+  const pathIdx = NAV_LINKS.findIndex((l) => pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href)));
+  const activeIdx = pendingIdx ?? pathIdx;
 
   /* ── Spring-driven numbers (no React renders while these animate) ── */
   const W = useMotionValue(60); // pill width
@@ -440,24 +450,21 @@ export function Navbar() {
   const LOOK = useMotionValue(2); // 0 top, 1 pill, 2 sphere (tint blend)
   const PULSE = useMotionValue(0); // jelly wobble
   const HOVER = useMotionValue(0);
-  const LX = useMotionValue(0); // selection lens: left edge (px from page center)
-  const RX = useMotionValue(0); // selection lens: right edge
-  const LK = useMotionValue(0); // selection lens: height kick while travelling
-  const LO = useMotionValue(0); // selection lens: open amount 0..1
+  const LX = useMotionValue(0); // highlighter: left edge (px from page center)
+  const RX = useMotionValue(0); // highlighter: right edge
+  const LS = useMotionValue(0); // highlighter: stretch amount 0..1..0 while it slides
+  const LO = useMotionValue(0); // highlighter: opacity
 
   /* ── DOM refs written to directly each frame ── */
-  const pathRef = useRef<SVGPathElement | null>(null);
-  const fillRef = useRef<SVGUseElement | null>(null);
+  const blurRef = useRef<HTMLDivElement | null>(null);
+  const pillShadeRef = useRef<HTMLDivElement | null>(null);
+  const dropShadeRef = useRef<HTMLDivElement | null>(null);
+  const lensRef = useRef<HTMLDivElement | null>(null);
   const fiRef = useRef<TileEls>({ disc: null, strip: null, capL: null, capR: null });
-  const lensFiRef = useRef<TileEls>({ strip: null, capL: null, capR: null });
-  const lensPathRef = useRef<SVGPathElement | null>(null);
-  const lensWrapRef = useRef<HTMLDivElement | null>(null);
-  const lensBackRef = useRef<HTMLDivElement | null>(null);
   const centerInnerRef = useRef<HTMLDivElement | null>(null);
   const linkRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const mobileBarRef = useRef<HTMLDivElement | null>(null);
   const boostRef = useRef(0);
-  const blurRef = useRef<HTMLDivElement | null>(null);
   const leftRef = useRef<HTMLDivElement | null>(null);
   const rightRef = useRef<HTMLDivElement | null>(null);
   const logoRef = useRef<HTMLDivElement | null>(null);
@@ -470,7 +477,13 @@ export function Navbar() {
   activeIdxRef.current = activeIdx;
   expandedRef.current = expanded;
   const lensPlacedRef = useRef(false);
+  const lensIdxRef = useRef(-1);
+  const lensDirRef = useRef(1);
+  const lensKRef = useRef(0.1);
   const loTargetRef = useRef(0);
+  const slideUntilRef = useRef(0); // timestamp until which the highlighter is mid-slide
+  const resyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dimsRef = useRef({ top: 1040, pill: 840 });
   const desktopRef = useRef(true);
   const reduceRef = useRef(false);
@@ -482,8 +495,8 @@ export function Navbar() {
 
   /* ── Draw one frame of the main liquid shape ── */
   const render = useCallback(() => {
-    const path = pathRef.current;
-    if (!path) return;
+    const back = blurRef.current;
+    if (!back) return;
     const grow = PULSE.get() * 5 + HOVER.get() * 3;
     const baseW = W.get();
     const baseH = H.get();
@@ -492,27 +505,38 @@ export function Navbar() {
     const R = h / 2;
     const D = Math.max(0, DV.get());
 
+    // Glass: clip the backdrop layer to the live liquid shape and tint it.
     const dStr = buildLiquidPath(w, h, D, NU.get());
-    path.setAttribute("d", dStr);
-
+    back.style.clipPath = `path("${dStr}")`;
     const set = LOOKS[themeNameRef.current];
     const L = Math.min(2, Math.max(0, LOOK.get()));
     const i = Math.min(1, Math.floor(L));
-    const t = L - i;
-    if (fillRef.current) fillRef.current.style.fill = rgba(withBoost(mix(set[i], set[i + 1], t), boostRef.current));
+    back.style.backgroundColor = rgba(mix(set[i], set[i + 1], L - i));
 
-    if (blurRef.current) blurRef.current.style.clipPath = `path("${dStr}")`;
-
-    // Refraction map tiles follow the live shape.
+    // Edge-bend map tiles follow the live shape.
     const fi = fiRef.current;
     if (fi.capL && fi.capR && fi.strip && fi.disc) {
       placeTiles(fi, OX - w / 2, w, R, CY);
-      // The drop's own lens is only drawn once it has left the pill.
-      const x = OX + w / 2 - R + D - R;
-      fi.disc.setAttribute("x", x.toFixed(2));
+      fi.disc.setAttribute("x", (OX + w / 2 - R + D - R).toFixed(2));
       fi.disc.setAttribute("y", (CY - R).toFixed(2));
       fi.disc.setAttribute("width", (D > 2 * R * 0.98 ? 2 * R : 0).toFixed(2));
       fi.disc.setAttribute("height", (2 * R).toFixed(2));
+    }
+
+    // Rim shading (inset box-shadows) for the pill and the theme drop.
+    const ps = pillShadeRef.current;
+    if (ps) {
+      ps.style.width = `${w.toFixed(2)}px`;
+      ps.style.height = `${h.toFixed(2)}px`;
+      ps.style.transform = `translate3d(${(OX - w / 2).toFixed(2)}px,${(CY - h / 2).toFixed(2)}px,0)`;
+    }
+    const ds = dropShadeRef.current;
+    if (ds) {
+      const xS = OX + w / 2 - R + D;
+      ds.style.width = `${(2 * R).toFixed(2)}px`;
+      ds.style.height = `${(2 * R).toFixed(2)}px`;
+      ds.style.transform = `translate3d(${(xS - R).toFixed(2)}px,${(CY - R).toFixed(2)}px,0)`;
+      ds.style.opacity = clamp01((D - 2 * R * 0.9) / (2 * R * 0.3)).toFixed(3);
     }
 
     // Content is glued to the pill edges and moves on the GPU only.
@@ -528,33 +552,34 @@ export function Navbar() {
     if (btn) {
       const xS = (Math.max(baseW, baseH) - baseH) / 2 + D;
       btn.style.transform = `translate3d(${(xS - 32).toFixed(2)}px,${CY - 32}px,0) scale(${(R / 32).toFixed(4)})`;
-      const vis = Math.min(1, Math.max(0, (D - 30) / 40));
+      const vis = clamp01((D - 30) / 40);
       btn.style.opacity = vis.toFixed(3);
       btn.style.pointerEvents = vis > 0.8 ? "auto" : "none";
     }
   }, [W, H, DV, NU, LOOK, PULSE, HOVER]);
 
-  /* ── Draw one frame of the selection lens ── */
+  /* ── Draw the active-item highlighter (always inside the bar) ── */
   const renderLens = useCallback(() => {
-    const wrap = lensWrapRef.current;
-    const path = lensPathRef.current;
-    if (!wrap || !path) return;
-    const open = Math.max(0, LO.get());
+    const el = lensRef.current;
+    if (!el) return;
+    const open = clamp01(LO.get());
     if (open < 0.01) {
-      if (wrap.style.visibility !== "hidden") wrap.style.visibility = "hidden";
+      if (el.style.visibility !== "hidden") el.style.visibility = "hidden";
       return;
     }
-    if (wrap.style.visibility !== "visible") wrap.style.visibility = "visible";
-    const hh = Math.max(2, (LENS_H + LK.get() * 9) * Math.min(1.05, open));
-    const l = LX.get();
-    const r = RX.get();
-    const w = Math.max(r - l, hh) * (0.7 + 0.3 * Math.min(1, open));
-    const c = (l + r) / 2;
-    const d = stadiumPath(w, hh, LENS_OX + c, CY);
-    path.setAttribute("d", d);
-    if (lensBackRef.current) lensBackRef.current.style.clipPath = `path("${d}")`;
-    placeTiles(lensFiRef.current, LENS_OX + c - w / 2, w, hh / 2, CY);
-  }, [LX, RX, LK, LO]);
+    if (el.style.visibility !== "visible") el.style.visibility = "visible";
+    const hh = Math.max(2, H.get() - HL_INSET);
+    let l = LX.get();
+    let r = RX.get();
+    // Stretch toward the side it is travelling to (scaleX 1 -> 1.1 -> 1 from that edge).
+    const w2 = (r - l) * (1 + lensKRef.current * LS.get());
+    if (lensDirRef.current > 0) r = l + w2;
+    else l = r - w2;
+    el.style.width = `${w2.toFixed(2)}px`;
+    el.style.height = `${hh.toFixed(2)}px`;
+    el.style.transform = `translate3d(${l.toFixed(2)}px,${(CY - hh / 2).toFixed(2)}px,0)`;
+    el.style.opacity = open.toFixed(3);
+  }, [LX, RX, LS, LO, H]);
 
   /* ── Controller helpers ── */
   const play = useCallback((key: string, mv: typeof W, to: number, opts: Parameters<typeof animate>[2]) => {
@@ -582,7 +607,7 @@ export function Navbar() {
     [play, PULSE]
   );
 
-  /* ── Selection lens: slide to the active menu item ── */
+  /* ── Highlighter: slide to the active menu item ── */
   const syncLens = useCallback(
     (animateMove: boolean) => {
       const idx = activeIdxRef.current;
@@ -590,50 +615,45 @@ export function Navbar() {
       const el = idx >= 0 ? linkRefs.current[idx] : null;
       if (expandedRef.current && el && inner) {
         const cx = el.offsetLeft + el.offsetWidth / 2 - inner.offsetWidth / 2;
-        const wd = Math.max(el.offsetWidth + 2 * LENS_PAD, LENS_H);
+        const wd = el.offsetWidth + 2 * HL_PAD;
         const l = cx - wd / 2;
         const r = cx + wd / 2;
         const closed = LO.get() < 0.05 || !lensPlacedRef.current;
         if (!animateMove || closed || reduceRef.current) {
           ctl.current["lx"]?.stop();
           ctl.current["rx"]?.stop();
+          ctl.current["ls"]?.stop();
           LX.set(l);
           RX.set(r);
+          LS.set(0);
         } else if (Math.abs(l - LX.get()) > 0.5 || Math.abs(r - RX.get()) > 0.5) {
-          // Leading edge moves fast, trailing edge lags: the lens stretches, then settles.
-          const goingRight = cx > (LX.get() + RX.get()) / 2;
-          const fast = { type: "spring" as const, stiffness: 420, damping: 27, restDelta: 0.1, restSpeed: 0.1 };
-          const slow = { type: "spring" as const, stiffness: 190, damping: 22, restDelta: 0.1, restSpeed: 0.1 };
-          play("lx", LX, l, goingRight ? slow : fast);
-          play("rx", RX, r, goingRight ? fast : slow);
-          play("lk", LK, 0.001, {
-            type: "spring",
-            velocity: 60,
-            stiffness: 240,
-            damping: 15,
-            restDelta: 0.004,
-            restSpeed: 0.01,
-          });
+          const steps = Math.max(1, Math.abs(idx - lensIdxRef.current));
+          lensDirRef.current = cx > (LX.get() + RX.get()) / 2 ? 1 : -1;
+          lensKRef.current = Math.min(0.2, 0.1 + 0.025 * (steps - 1));
+          slideUntilRef.current = performance.now() + 600; // observers must not interrupt this slide
+          play("lx", LX, l, SLIDE);
+          play("rx", RX, r, SLIDE);
+          ctl.current["ls"]?.stop();
+          ctl.current["ls"] = animate(LS, [0, 1, 0], { duration: 0.44, ease: [0.25, 0.1, 0.25, 1] }) as Controls;
         }
+        lensIdxRef.current = idx;
         lensPlacedRef.current = true;
         if (loTargetRef.current !== 1) {
           loTargetRef.current = 1;
-          play("lo", LO, 1, {
-            type: "spring",
-            stiffness: 220,
-            damping: 22,
-            delay: closed && animateMove ? 0.5 : 0,
-          });
+          play("lo", LO, 1, { duration: 0.3, ease: [1, 0, 0.4, 1], delay: closed && animateMove ? 0.55 : 0 });
         }
       } else {
-        if (!el) lensPlacedRef.current = false;
+        if (!el) {
+          lensPlacedRef.current = false;
+          lensIdxRef.current = -1;
+        }
         if (loTargetRef.current !== 0) {
           loTargetRef.current = 0;
-          play("lo", LO, 0, { type: "spring", stiffness: 260, damping: 28 });
+          play("lo", LO, 0, { duration: 0.2, ease: "easeOut" });
         }
       }
     },
-    [LX, RX, LK, LO, play]
+    [LX, RX, LS, LO, play]
   );
 
   const applyPhase = useCallback(
@@ -691,33 +711,7 @@ export function Navbar() {
     [applyPhase]
   );
 
-  /* ── Glass capabilities, refraction tiles ── */
-  useEffect(() => {
-    if (!introDone) return;
-    const contrast = window.matchMedia("(prefers-contrast: more)").matches;
-    const lowTransparency = window.matchMedia("(prefers-reduced-transparency: reduce)").matches;
-    const ok = canRefract();
-    const b = (canBackdrop() ? 0 : 0.28) + (contrast ? 0.18 : 0) + (lowTransparency ? 0.55 : 0) + (ok ? 0 : 0.2);
-    boostRef.current = b;
-    setBoost(b);
-    if (!ok) return;
-    const mk = <K extends string>(kinds: K[], name: ProfileName) => {
-      const out = {} as Record<K, string>;
-      for (const k of kinds) {
-        const c = tileCanvas(k as unknown as TileKind, name);
-        if (!c) return null;
-        out[k] = c.toDataURL("image/png");
-      }
-      return out;
-    };
-    const main = mk<TileKind>(["disc", "strip", "capL", "capR"], "main");
-    const lens = mk<"strip" | "capL" | "capR">(["strip", "capL", "capR"], "lens");
-    if (!main || !lens) return;
-    setTiles({ main, lens });
-    setRefract(true);
-  }, [introDone]);
-
-  /* Mobile bar: same glass, map sized to the bar */
+  /* Mobile bar: same glass, edge map sized to the bar */
   useEffect(() => {
     if (!introDone || !refract) return;
     const el = mobileBarRef.current;
@@ -768,27 +762,36 @@ export function Navbar() {
         renderLens();
       });
     };
-    const unsubs = [LX, RX, LK, LO].map((mv) => mv.on("change", schedule));
+    const unsubs = [LX, RX, LS, LO, H].map((mv) => mv.on("change", schedule));
     renderLens();
     return () => unsubs.forEach((u) => u());
-  }, [introDone, renderLens, LX, RX, LK, LO]);
+  }, [introDone, renderLens, LX, RX, LS, LO, H]);
 
   useEffect(() => {
     themeNameRef.current = currentTheme === "light" ? "light" : "dark";
     render();
   }, [currentTheme, render, boost]);
 
-  /* Lens follows the route and the pill state */
+  /* Highlighter follows the (optimistic) active item and the pill state */
   useEffect(() => {
     if (!introDone) return;
     syncLens(true);
   }, [introDone, pathname, expanded, activeIdx, syncLens]);
 
+  /* Re-measure on resize / font load, but never interrupt a running slide */
   useEffect(() => {
     if (!introDone) return;
     const inner = centerInnerRef.current;
     if (!inner) return;
-    const onChange = () => syncLens(false);
+    const onChange = () => {
+      const left = slideUntilRef.current - performance.now();
+      if (left > 0) {
+        if (resyncTimer.current) clearTimeout(resyncTimer.current);
+        resyncTimer.current = setTimeout(() => syncLens(false), left + 30);
+        return;
+      }
+      syncLens(false);
+    };
     const ro = new ResizeObserver(onChange);
     ro.observe(inner);
     window.addEventListener("resize", onChange);
@@ -796,12 +799,16 @@ export function Navbar() {
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", onChange);
+      if (resyncTimer.current) clearTimeout(resyncTimer.current);
     };
   }, [introDone, syncLens]);
 
-  /* ── Intro / initial phase / resize ── */
+  /* ── Boot: build + decode the glass, fade it in as the sphere, then open the pill ── */
   useEffect(() => {
     if (!introDone) return;
+    let cancelled = false;
+    let startTimer: ReturnType<typeof setTimeout> | null = null;
+
     setMounted(true);
     reduceRef.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -812,15 +819,25 @@ export function Navbar() {
     };
     desktopRef.current = measure();
 
-    let startTimer: ReturnType<typeof setTimeout> | null = null;
-    const y = window.scrollY || 0;
-    const target = phaseForScroll(y);
-    if (target === "sphere") {
-      go("sphere", true);
-    } else {
-      // Starts as the sphere, then stretches out into the pill.
-      startTimer = setTimeout(() => go(target), 150);
-    }
+    const start = () => {
+      if (cancelled) return;
+      setGlassReady(true); // glass + logo fade in as the sphere
+      const target = phaseForScroll(window.scrollY || 0);
+      if (target === "sphere") go("sphere", true);
+      else startTimer = setTimeout(() => go(target), reduceRef.current ? 0 : INTRO_DELAY);
+    };
+
+    prepareGlass().then(({ boost: b, urls }) => {
+      if (cancelled) return;
+      boostRef.current = b;
+      setBoost(b);
+      if (urls) {
+        setTiles(urls);
+        setRefract(true);
+      }
+      // two frames: lets the filter + tiles commit and be placed before anything is visible
+      requestAnimationFrame(() => requestAnimationFrame(start));
+    });
 
     const onResize = () => {
       const wasDesktop = desktopRef.current;
@@ -832,6 +849,7 @@ export function Navbar() {
     };
     window.addEventListener("resize", onResize);
     return () => {
+      cancelled = true;
       if (startTimer) clearTimeout(startTimer);
       window.removeEventListener("resize", onResize);
       clearTimers();
@@ -870,9 +888,16 @@ export function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, [mounted, introDone, go]);
 
+  /* Route settled: close the drawer, drop the optimistic active item, and sync navbar phase to scroll */
   useEffect(() => {
     setIsMobileMenuOpen(false);
-  }, [pathname]);
+    setPendingIdx(null);
+    if (desktopRef.current && mounted) {
+      requestAnimationFrame(() => {
+        go(phaseForScroll(window.scrollY || 0));
+      });
+    }
+  }, [pathname, mounted, go]);
 
   const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
 
@@ -886,7 +911,6 @@ export function Navbar() {
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     setIsMobileMenuOpen(false);
     progRef.current = true;
-    if (desktopRef.current) go("pill");
     if (progTimeout.current) clearTimeout(progTimeout.current);
     progTimeout.current = setTimeout(() => {
       progRef.current = false;
@@ -897,6 +921,14 @@ export function Navbar() {
       const id = href.split("#")[1];
       document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
     }
+  };
+
+  /* Desktop link click: start the highlighter slide NOW instead of waiting for the route */
+  const handleDesktopLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string, idx: number) => {
+    setPendingIdx(idx);
+    if (pendingTimer.current) clearTimeout(pendingTimer.current);
+    pendingTimer.current = setTimeout(() => setPendingIdx(null), 4000); // safety if navigation never lands
+    handleNavClick(e, href);
   };
 
   if (!introDone) return null;
@@ -916,8 +948,10 @@ export function Navbar() {
   const curve = glassTheme === "dark" ? GLASS.curveDark : GLASS.curveLight;
   const mainBackdrop = refract && tiles ? chainBackdrop("lg-main") : fallbackBackdrop(glassTheme);
   const mobBackdrop = refract && mobileMap ? chainBackdrop("lg-mob") : fallbackBackdrop(glassTheme);
-  const lensBd = lensBackdrop(refract && !!tiles, glassTheme);
-  const mobTint = rgba(withBoost(LOOKS[glassTheme][1], boost));
+  // Extra legibility veil, only used where the SVG chain is not available.
+  const scrimColor = boost > 0 ? (glassTheme === "dark" ? `rgba(10,10,12,${boost})` : `rgba(255,255,255,${boost})`) : null;
+  const scrim = scrimColor ? `linear-gradient(${scrimColor},${scrimColor})` : undefined;
+  const mobTint = rgba(LOOKS[glassTheme][1]);
 
   return (
     <>
@@ -938,10 +972,10 @@ export function Navbar() {
               colorInterpolationFilters="sRGB"
             >
               <feFlood floodColor="rgb(128,128,128)" result="base" />
-              <feImage ref={(el) => { fiRef.current.disc = el; }} href={tiles.main.disc} x={0} y={0} width={0} height={0} preserveAspectRatio="none" result="disc" />
-              <feImage ref={(el) => { fiRef.current.strip = el; }} href={tiles.main.strip} x={0} y={0} width={0} height={0} preserveAspectRatio="none" result="strip" />
-              <feImage ref={(el) => { fiRef.current.capL = el; }} href={tiles.main.capL} x={0} y={0} width={0} height={0} preserveAspectRatio="none" result="capL" />
-              <feImage ref={(el) => { fiRef.current.capR = el; }} href={tiles.main.capR} x={0} y={0} width={0} height={0} preserveAspectRatio="none" result="capR" />
+              <feImage ref={(el) => { fiRef.current.disc = el; }} href={tiles.disc} x={0} y={0} width={0} height={0} preserveAspectRatio="none" result="disc" />
+              <feImage ref={(el) => { fiRef.current.strip = el; }} href={tiles.strip} x={0} y={0} width={0} height={0} preserveAspectRatio="none" result="strip" />
+              <feImage ref={(el) => { fiRef.current.capL = el; }} href={tiles.capL} x={0} y={0} width={0} height={0} preserveAspectRatio="none" result="capL" />
+              <feImage ref={(el) => { fiRef.current.capR = el; }} href={tiles.capR} x={0} y={0} width={0} height={0} preserveAspectRatio="none" result="capR" />
               <feMerge result="map">
                 <feMergeNode in="base" />
                 <feMergeNode in="disc" />
@@ -950,29 +984,6 @@ export function Navbar() {
                 <feMergeNode in="capR" />
               </feMerge>
               {bendChain(GLASS.main.maxDisp * 2, curve)}
-            </filter>
-
-            <filter
-              id="lg-lens"
-              filterUnits="userSpaceOnUse"
-              primitiveUnits="userSpaceOnUse"
-              x={0}
-              y={0}
-              width={LENS_W}
-              height={CANVAS_H}
-              colorInterpolationFilters="sRGB"
-            >
-              <feFlood floodColor="rgb(128,128,128)" result="base" />
-              <feImage ref={(el) => { lensFiRef.current.strip = el; }} href={tiles.lens.strip} x={0} y={0} width={0} height={0} preserveAspectRatio="none" result="strip" />
-              <feImage ref={(el) => { lensFiRef.current.capL = el; }} href={tiles.lens.capL} x={0} y={0} width={0} height={0} preserveAspectRatio="none" result="capL" />
-              <feImage ref={(el) => { lensFiRef.current.capR = el; }} href={tiles.lens.capR} x={0} y={0} width={0} height={0} preserveAspectRatio="none" result="capR" />
-              <feMerge result="map">
-                <feMergeNode in="base" />
-                <feMergeNode in="strip" />
-                <feMergeNode in="capL" />
-                <feMergeNode in="capR" />
-              </feMerge>
-              {bendChain(GLASS.lens.maxDisp * 2, null)}
             </filter>
 
             {mobileMap && (
@@ -994,35 +1005,21 @@ export function Navbar() {
         </svg>
       )}
 
-      {/* ═══ Mobile: same liquid glass as desktop ═══ */}
+      {/* ═══ Mobile: the same glass recipe, applied straight to the bar ═══ */}
       <div className="md:hidden fixed top-0 left-0 w-full z-50 px-3 pt-3 pointer-events-none">
         <div
           ref={mobileBarRef}
           data-lg={glassTheme}
-          className="lg-ink relative pointer-events-auto mx-auto flex items-center justify-between gap-2 h-14 pl-4 pr-2.5 rounded-full"
-          style={{ background: mobileMap ? undefined : mobTint }}
+          className="lg-shade lg-ink relative pointer-events-auto mx-auto flex items-center justify-between gap-2 h-14 pl-4 pr-2.5 rounded-full"
+          style={{
+            backgroundColor: mobTint,
+            backgroundImage: scrim,
+            backdropFilter: mobBackdrop,
+            WebkitBackdropFilter: mobBackdrop,
+            opacity: glassReady ? 1 : 0,
+            transition: GLASS_FADE,
+          }}
         >
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 rounded-full pointer-events-none"
-            style={{ backdropFilter: mobBackdrop, WebkitBackdropFilter: mobBackdrop }}
-          />
-          {mobileMap && (
-            <svg
-              aria-hidden="true"
-              width={mobileMap.w}
-              height={mobileMap.h}
-              viewBox={`0 0 ${mobileMap.w} ${mobileMap.h}`}
-              className="absolute inset-0 pointer-events-none overflow-visible"
-            >
-              <GlassPaint
-                id="lgm"
-                theme={glassTheme}
-                d={stadiumPath(mobileMap.w, mobileMap.h, mobileMap.w / 2, mobileMap.h / 2)}
-                fill={mobTint}
-              />
-            </svg>
-          )}
           <Link href="/" className="relative z-10 flex items-center gap-2 min-w-0 active:scale-95 transition-transform">
             <Logo className="w-7 h-7 shrink-0" priority />
             <span className="font-bold text-lg tracking-tighter truncate text-[color:var(--text-primary)]">
@@ -1058,26 +1055,46 @@ export function Navbar() {
         className="lg-ink hidden md:block fixed top-0 left-0 w-full z-50 pointer-events-none"
         style={{ height: CANVAS_H }}
       >
-        {/* Liquid layer: pill + logo sphere + theme drop (single SVG path) */}
+        {/* Liquid layer: pill + logo sphere + theme drop.
+            NOTE: never put opacity/filter on an ancestor of the backdrop layer (it would
+            become the backdrop root and the glass would see nothing). Fades live on the
+            glass elements themselves. */}
         <div
           className="absolute top-0 pointer-events-none"
           style={{ left: "50%", marginLeft: -OX, width: CANVAS_W, height: CANVAS_H, transform: "translateZ(0)" }}
         >
-          {/* Frosted + refracting backdrop, clipped to the live liquid shape */}
+          {/* Frosted + edge-bending backdrop, clipped to the live liquid shape.
+              Starts clipped to the sphere and invisible: no rectangle can ever show. */}
           <div
             ref={blurRef}
             className="absolute inset-0"
-            style={{ backdropFilter: mainBackdrop, WebkitBackdropFilter: mainBackdrop }}
+            style={{
+              clipPath: `path("${INITIAL_PATH}")`,
+              opacity: glassReady ? 1 : 0,
+              transition: GLASS_FADE,
+              backdropFilter: mainBackdrop,
+              WebkitBackdropFilter: mainBackdrop,
+              backgroundImage: scrim,
+            }}
           />
-          <svg
-            width={CANVAS_W}
-            height={CANVAS_H}
-            viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
-            className="absolute inset-0 overflow-visible"
-            aria-hidden="true"
-          >
-            <GlassPaint id="lg" theme={glassTheme} pathRef={pathRef} fillRef={fillRef} fill="rgba(0,0,0,0)" />
-          </svg>
+          {/* Rim reflections + soft shadow (same inset box-shadow stack as the reference) */}
+          <div
+            ref={pillShadeRef}
+            className="lg-shade absolute left-0 top-0 rounded-full pointer-events-none"
+            style={{
+              width: 60,
+              height: 60,
+              transform: `translate3d(${OX - 30}px,${CY - 30}px,0)`,
+              contain: "layout style",
+              opacity: glassReady ? 1 : 0,
+              transition: GLASS_FADE,
+            }}
+          />
+          <div
+            ref={dropShadeRef}
+            className="lg-shade absolute left-0 top-0 rounded-full pointer-events-none"
+            style={{ width: 60, height: 60, opacity: 0, transform: "translate3d(0,0,0)", contain: "layout style" }}
+          />
         </div>
 
         {/* Sphere state: logo + click target */}
@@ -1088,7 +1105,11 @@ export function Navbar() {
         >
           <m.div
             initial={false}
-            animate={phase === "sphere" ? { opacity: 1, scale: 1, rotate: 0 } : { opacity: 0, scale: 0.6, rotate: -20 }}
+            animate={
+              phase === "sphere" && glassReady
+                ? { opacity: 1, scale: 1, rotate: 0 }
+                : { opacity: 0, scale: 0.6, rotate: -20 }
+            }
             transition={
               phase === "sphere"
                 ? { type: "spring", stiffness: 260, damping: 20, delay: 0.28 }
@@ -1111,7 +1132,7 @@ export function Navbar() {
             width: 64,
             height: 64,
             transform: "translate3d(-50%,-50%,0)",
-            pointerEvents: phase === "sphere" ? "auto" : "none",
+            pointerEvents: phase === "sphere" && glassReady ? "auto" : "none",
           }}
         />
 
@@ -1142,6 +1163,20 @@ export function Navbar() {
           </m.div>
         </div>
 
+        {/* Active-item highlighter: tinted glass pill that slides BEHIND the text, inside the bar */}
+        <div
+          ref={lensRef}
+          className="lg-hl absolute left-1/2 top-0 rounded-full pointer-events-none"
+          style={{
+            width: 0,
+            height: 0,
+            opacity: 0,
+            visibility: "hidden",
+            transform: "translate3d(0,0,0)",
+            contain: "layout style",
+          }}
+        />
+
         {/* Center block: nav links (always centered, never moves) */}
         <div
           className="absolute left-1/2 pointer-events-none"
@@ -1164,12 +1199,14 @@ export function Navbar() {
                     linkRefs.current[i] = el;
                   }}
                   tabIndex={expanded ? 0 : -1}
-                  onClick={(e) => handleNavClick(e, link.href)}
+                  onClick={(e) => handleDesktopLinkClick(e, link.href, i)}
                   className={`relative px-3 py-2 font-medium text-sm tracking-tight rounded-full z-10 flex items-center whitespace-nowrap ${
                     isActive ? "lg-link-active" : "lg-link"
                   }`}
                 >
-                  {link.name}
+                  <span className="lg-label" data-label={link.name}>
+                    {link.name}
+                  </span>
                 </Link>
               );
             })}
@@ -1204,41 +1241,6 @@ export function Navbar() {
               <span>Contact</span>
             </Link>
           </m.div>
-        </div>
-
-        {/* Selection lens: clear glass that slides between menu items (above the links, below the drop) */}
-        <div
-          ref={lensWrapRef}
-          className="absolute top-0 pointer-events-none"
-          style={{
-            left: "50%",
-            marginLeft: -LENS_OX,
-            width: LENS_W,
-            height: CANVAS_H,
-            transform: "translateZ(0)",
-            visibility: "hidden",
-          }}
-        >
-          <div
-            ref={lensBackRef}
-            className="absolute inset-0"
-            style={{ backdropFilter: lensBd, WebkitBackdropFilter: lensBd }}
-          />
-          <svg
-            width={LENS_W}
-            height={CANVAS_H}
-            viewBox={`0 0 ${LENS_W} ${CANVAS_H}`}
-            className="absolute inset-0 overflow-visible"
-            aria-hidden="true"
-          >
-            <GlassPaint
-              id="lgl"
-              theme={glassTheme}
-              lens
-              pathRef={lensPathRef}
-              fill={rgba(withBoost(LENS_FILL[glassTheme], boost * 0.4))}
-            />
-          </svg>
         </div>
 
         {/* Theme drop: rides on the liquid path, position/opacity written each frame */}
