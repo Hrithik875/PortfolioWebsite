@@ -42,35 +42,16 @@ export function IntroReveal() {
     let ctx: gsap.Context | null = null;
 
     const runTimeline = async () => {
-      // 1. Wait for document fonts and hero image to decode before starting
+      // 1. Wait for document fonts to settle (fast 250ms ceiling so animation starts immediately)
       try {
-        const fontPromise =
-          typeof document !== "undefined" && document.fonts
-            ? document.fonts.ready
-            : Promise.resolve();
-
-        const imgPromise = new Promise<void>((resolve) => {
-          if (typeof window === "undefined") {
-            resolve();
-            return;
-          }
-          const img = new Image();
-          img.src = "/intro-hero.jpg";
-          if (img.complete) {
-            resolve();
-          } else {
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
-          }
-        });
-
-        // 1.5s max safety ceiling so animation never indefinitely hangs
-        await Promise.race([
-          Promise.all([fontPromise, imgPromise]),
-          new Promise((resolve) => setTimeout(resolve, 1500)),
-        ]);
+        if (typeof document !== "undefined" && document.fonts) {
+          await Promise.race([
+            document.fonts.ready,
+            new Promise((resolve) => setTimeout(resolve, 250)),
+          ]);
+        }
       } catch {
-        // Fallback: proceed even if font/image promise rejected
+        // Fallback: proceed even if font promise rejected
       }
 
       if (isCancelled || !containerRef.current) return;
@@ -242,6 +223,9 @@ export function IntroReveal() {
           force3D: true,
         });
 
+        // SplitText and initial transform states are prepared; reveal typography
+        root.classList.add("is-ready");
+
         const tl = gsap.timeline({
           defaults: { ease: "hop" },
           onComplete: () => {
@@ -402,6 +386,9 @@ export function IntroReveal() {
 
     return () => {
       isCancelled = true;
+      if (containerRef.current) {
+        containerRef.current.classList.remove("is-ready");
+      }
       if (ctx) {
         ctx.revert();
       }

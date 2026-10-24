@@ -99,6 +99,19 @@
   z-index: 1;
 }
 
+/* Initial blank screen state: hide preloader typography until SplitText and GSAP are ready */
+.intro-reveal .intro-title,
+.intro-reveal .outro-title,
+.intro-reveal .tag {
+  visibility: hidden;
+}
+
+.intro-reveal.is-ready .intro-title,
+.intro-reveal.is-ready .outro-title,
+.intro-reveal.is-ready .tag {
+  visibility: visible;
+}
+
 .intro-reveal .intro-title {
   position: absolute;
   top: 50%;
