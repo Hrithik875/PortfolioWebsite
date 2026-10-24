@@ -2,9 +2,23 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Moon, Sun, Menu, X, ArrowUpRight } from "lucide-react";
+import {
+  Moon,
+  Sun,
+  Menu,
+  X,
+  ArrowUpRight,
+  Briefcase,
+  FlaskConical,
+  Building2,
+  Users,
+  User,
+  FileText,
+  Mail,
+  type LucideIcon,
+} from "lucide-react";
 import { Logo } from "@/components/Logo";
-import { m, animate, useMotionValue, AnimatePresence, Variants } from "framer-motion";
+import { m, animate, useMotionValue, Variants } from "framer-motion";
 import { useTheme } from "./ThemeProvider";
 import { useIntro } from "@/context/IntroContext";
 
@@ -23,6 +37,13 @@ import { useIntro } from "@/context/IntroContext";
 
    Load sequence: glass stays invisible until tiles are decoded + theme is
    resolved -> glass fades in as the sphere -> pill stretches out.
+
+   MOBILE MENU (mirrored "push-back" menu):
+     • the page (#page-shell, or <main> as a fallback) shrinks to PAGE_SCALE,
+       gets rounded corners and slides to the LEFT, revealing a green gradient
+     • menu items are right-aligned and stagger in from the RIGHT
+     • the header keeps its place, the glass fades out and the hamburger turns
+       into an X
    ════════════════════════════════════════════════════════════════════════════ */
 
 type Phase = "top" | "pill" | "sphere";
@@ -40,6 +61,19 @@ const HL_PAD = 2; // highlighter extends this far past the active link on each s
 const HL_INSET = 26; // highlighter is this much shorter than the bar (13px top + 13px bottom)
 const INTRO_DELAY = 450; // ms between the sphere appearing and the pill stretching out
 const GLASS_FADE = "opacity .5s cubic-bezier(1, 0, 0.4, 1)";
+
+/* ── Mobile menu tunables (measured from the reference video) ────────────── */
+const MENU_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
+const MENU_OPEN_S = 0.6; // page shrinks + slides away
+const MENU_CLOSE_S = 0.42; // page grows back (slightly quicker than opening)
+const PAGE_SCALE = 0.65; // final scale of the page card
+const PAGE_SHIFT = 0.525; // final horizontal shift, as a fraction of the screen width (negative = left)
+const PAGE_RADIUS = 28; // final corner radius (px, on screen)
+const MENU_BG_DARK =
+  "linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(20, 20, 26, 0.72) 40%, rgba(10, 10, 14, 0.88) 100%)";
+const MENU_BG_LIGHT =
+  "linear-gradient(135deg, rgba(255, 255, 255, 0.90) 0%, rgba(245, 247, 252, 0.78) 45%, rgba(232, 236, 245, 0.88) 100%)";
+const SHELL_SELECTOR = "#page-shell"; // wrapper around your page content (see layout snippet)
 
 /* ── Glass tunables ──────────────────────────────────────────────────────── */
 const ENABLE_REFRACTION = true; // false = frost + rim only (no edge bending)
@@ -420,6 +454,32 @@ const NAV_LINKS = [
   { name: "About", href: "/about" },
 ];
 
+/* Icons shown next to each link in the mobile menu */
+const MENU_ICONS: Record<string, LucideIcon> = {
+  Work: Briefcase,
+  Research: FlaskConical,
+  Experience: Building2,
+  Leadership: Users,
+  About: User,
+};
+
+/* Mobile menu items: they slide in from the RIGHT with a stagger and slide back out fast. */
+const menuItemVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    x: 72,
+    transition: { duration: 0.22, ease: "easeIn" },
+  },
+  visible: (i: number) => ({
+    opacity: 1,
+    x: 0,
+    transition: { delay: 0.14 + i * 0.045, duration: 0.5, ease: MENU_EASE },
+  }),
+};
+
+const menuRowClass =
+  "flex flex-row-reverse items-center gap-4 py-2.5 px-4 rounded-full text-[15px] tracking-tight whitespace-nowrap text-[color:var(--text-primary)] transition-all";
+
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 export function Navbar() {
@@ -427,6 +487,7 @@ export function Navbar() {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [menuMounted, setMenuMounted] = useState(false); // menu layer exists (stays true until the close animation ends)
   const [phase, setPhase] = useState<Phase>("sphere");
   const [refract, setRefract] = useState(false);
   const [tiles, setTiles] = useState<Record<TileKind, string> | null>(null);
@@ -454,6 +515,7 @@ export function Navbar() {
   const RX = useMotionValue(0); // highlighter: right edge
   const LS = useMotionValue(0); // highlighter: stretch amount 0..1..0 while it slides
   const LO = useMotionValue(0); // highlighter: opacity
+  const MENU_P = useMotionValue(0); // mobile menu progress: 0 closed .. 1 open
 
   /* ── DOM refs written to directly each frame ── */
   const blurRef = useRef<HTMLDivElement | null>(null);
@@ -470,12 +532,33 @@ export function Navbar() {
   const logoRef = useRef<HTMLDivElement | null>(null);
   const themeBtnRef = useRef<HTMLButtonElement | null>(null);
 
+  /* Mobile menu refs */
+  const menuLayerRef = useRef<HTMLDivElement | null>(null); // the green gradient layer
+  const shellRef = useRef<HTMLElement | null>(null); // the page wrapper that shrinks
+  const shellActiveRef = useRef(false); // scroll is locked + shell prepared
+  const shellGeo = useRef({ top: 0, h: 0, sy: 0, vw: 0, vh: 0 });
+  const menuNavRef = useRef<HTMLElement | null>(null);
+  const shellSaved = useRef<{
+    position: string;
+    zIndex: string;
+    backgroundColor: string;
+    touchAction: string;
+    pointerEvents: string;
+    htmlOverflow: string;
+    htmlTouchAction: string;
+    bodyOverflow: string;
+    bodyTouchAction: string;
+  } | null>(null);
+  const menuCtl = useRef<Controls | undefined>(undefined);
+  const menuOpenRef = useRef(false);
+
   const themeNameRef = useRef<"dark" | "light">("dark");
   const phaseRef = useRef<Phase>("sphere");
   const activeIdxRef = useRef(activeIdx);
   const expandedRef = useRef(expanded);
   activeIdxRef.current = activeIdx;
   expandedRef.current = expanded;
+  menuOpenRef.current = isMobileMenuOpen;
   const lensPlacedRef = useRef(false);
   const lensIdxRef = useRef(-1);
   const lensDirRef = useRef(1);
@@ -711,6 +794,128 @@ export function Navbar() {
     [applyPhase]
   );
 
+  /* ════════ Mobile menu: page push-back (mirrored: the page goes LEFT) ════════ */
+
+  /* Measure the page wrapper once, lock scrolling, and lift the page above the green layer. */
+  const prepareShell = useCallback(() => {
+    if (shellActiveRef.current) return; // already prepared (e.g. re-opened mid-close)
+    const root = document.documentElement;
+    const body = document.body;
+    const el = document.querySelector(SHELL_SELECTOR) as HTMLElement | null;
+    const sy = window.scrollY || 0;
+    shellSaved.current = {
+      position: el?.style.position ?? "",
+      zIndex: el?.style.zIndex ?? "",
+      backgroundColor: el?.style.backgroundColor ?? "",
+      touchAction: el?.style.touchAction ?? "",
+      pointerEvents: el?.style.pointerEvents ?? "",
+      htmlOverflow: root.style.overflow,
+      htmlTouchAction: root.style.touchAction,
+      bodyOverflow: body.style.overflow,
+      bodyTouchAction: body.style.touchAction,
+    };
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      shellGeo.current = {
+        top: rect.top + sy,
+        h: rect.height,
+        sy,
+        vw: window.innerWidth,
+        vh: window.innerHeight,
+      };
+      if (getComputedStyle(el).position === "static") el.style.position = "relative";
+      el.style.zIndex = "45"; // above the green layer (z-40), below the header (z-50)
+      el.style.backgroundColor = "var(--background)";
+      el.style.touchAction = "none";
+      el.style.willChange = "transform, clip-path";
+      shellRef.current = el;
+
+      // Transparent blocker overlay: intercepts all clicks/touches so page contents cannot be interacted with
+      let overlay = el.querySelector("#page-shell-overlay") as HTMLElement | null;
+      if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "page-shell-overlay";
+        overlay.setAttribute("aria-label", "Close menu");
+        overlay.style.position = "absolute";
+        overlay.style.inset = "0";
+        overlay.style.zIndex = "99999";
+        overlay.style.cursor = "pointer";
+        overlay.style.touchAction = "none";
+        overlay.style.background = "transparent";
+
+        const handleClose = (e: Event) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsMobileMenuOpen(false);
+        };
+        overlay.addEventListener("click", handleClose, true);
+        overlay.addEventListener("touchend", handleClose, { passive: false });
+        overlay.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+        el.appendChild(overlay);
+      }
+    }
+    // Lock scrolling on mobile completely
+    root.style.overflow = "hidden";
+    root.style.touchAction = "none";
+    body.style.overflow = "hidden";
+    body.style.touchAction = "none";
+    shellActiveRef.current = true;
+  }, []);
+
+  /* One frame: p = 0 (closed) .. 1 (open). */
+  const applyShell = useCallback((p: number) => {
+    const layer = menuLayerRef.current;
+    if (layer) layer.style.opacity = clamp01(p / 0.25).toFixed(3); // frosted glass fades in almost immediately
+    const el = shellRef.current;
+    if (!el || !shellActiveRef.current) return;
+    const g = shellGeo.current;
+    const s = 1 - (1 - PAGE_SCALE) * p;
+    const tx = -PAGE_SHIFT * g.vw * p; // negative = to the LEFT
+    const r = (PAGE_RADIUS * p) / s; // radius lives in page space, so divide by the scale
+    // Clip the (possibly very tall) page to exactly the slice that is on screen, with rounded corners.
+    const clipTop = g.sy - g.top;
+    const clipBottom = g.h - (clipTop + g.vh);
+    el.style.transformOrigin = `50% ${(clipTop + g.vh / 2).toFixed(2)}px`;
+    el.style.transform = `translate3d(${tx.toFixed(2)}px,0,0) scale(${s.toFixed(4)})`;
+    el.style.clipPath = `inset(${clipTop.toFixed(2)}px 0px ${clipBottom.toFixed(2)}px 0px round ${r.toFixed(2)}px)`;
+  }, []);
+
+  /* Put the page back exactly as it was and unlock scrolling. */
+  const restoreShell = useCallback(() => {
+    const el = shellRef.current;
+    const sv = shellSaved.current;
+    if (el) {
+      const overlay = el.querySelector("#page-shell-overlay");
+      if (overlay) overlay.remove();
+    }
+    if (el && sv) {
+      el.style.transform = "";
+      el.style.transformOrigin = "";
+      el.style.clipPath = "";
+      el.style.willChange = "";
+      el.style.position = sv.position;
+      el.style.zIndex = sv.zIndex;
+      el.style.backgroundColor = sv.backgroundColor;
+      el.style.touchAction = sv.touchAction;
+      el.style.pointerEvents = sv.pointerEvents;
+    }
+    if (sv) {
+      document.documentElement.style.overflow = sv.htmlOverflow;
+      document.documentElement.style.touchAction = sv.htmlTouchAction;
+      document.body.style.overflow = sv.bodyOverflow;
+      document.body.style.touchAction = sv.bodyTouchAction;
+    }
+    shellRef.current = null;
+    shellSaved.current = null;
+    shellActiveRef.current = false;
+  }, []);
+
+  const openMenu = useCallback(() => {
+    setMenuMounted(true);
+    setIsMobileMenuOpen(true);
+  }, []);
+  const closeMenu = useCallback(() => setIsMobileMenuOpen(false), []);
+
   /* Mobile bar: same glass, edge map sized to the bar */
   useEffect(() => {
     if (!introDone || !refract) return;
@@ -899,6 +1104,110 @@ export function Navbar() {
     }
   }, [pathname, mounted, go]);
 
+  /* ── Mobile menu: every progress change redraws the page card + green layer ── */
+  useEffect(() => MENU_P.on("change", applyShell), [MENU_P, applyShell]);
+
+  /* ── Mobile menu: open / close animation ── */
+  useEffect(() => {
+    const fast = reduceRef.current;
+    if (isMobileMenuOpen) {
+      prepareShell();
+      applyShell(MENU_P.get());
+      menuCtl.current?.stop();
+      menuCtl.current = animate(MENU_P, 1, {
+        duration: fast ? 0.01 : MENU_OPEN_S,
+        ease: MENU_EASE,
+      } as never) as Controls;
+    } else if (shellActiveRef.current) {
+      menuCtl.current?.stop();
+      menuCtl.current = animate(MENU_P, 0, {
+        duration: fast ? 0.01 : MENU_CLOSE_S,
+        ease: MENU_EASE,
+        onComplete: () => {
+          if (menuOpenRef.current) return; // re-opened in the meantime
+          restoreShell();
+          setMenuMounted(false);
+        },
+      } as never) as Controls;
+    }
+  }, [isMobileMenuOpen, MENU_P, prepareShell, applyShell, restoreShell]);
+
+  /* Tapping the shrunken page closes the menu (like in the reference) */
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    const el = shellRef.current;
+    if (!el) return;
+    const onClick = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsMobileMenuOpen(false);
+    };
+    el.addEventListener("click", onClick, true);
+    return () => el.removeEventListener("click", onClick, true);
+  }, [isMobileMenuOpen, menuMounted]);
+
+  /* Freeze all window scroll/touch events on mobile when menu is open so page shell cannot shift */
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+
+    const preventScroll = (e: TouchEvent | WheelEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (menuNavRef.current && menuNavRef.current.contains(target)) {
+        return;
+      }
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    };
+
+    const keepScrollLocked = () => {
+      if (shellActiveRef.current && window.scrollY !== shellGeo.current.sy) {
+        window.scrollTo(0, shellGeo.current.sy);
+      }
+    };
+
+    window.addEventListener("touchmove", preventScroll, { passive: false });
+    window.addEventListener("wheel", preventScroll, { passive: false });
+    window.addEventListener("scroll", keepScrollLocked, { passive: false });
+
+    return () => {
+      window.removeEventListener("touchmove", preventScroll);
+      window.removeEventListener("wheel", preventScroll);
+      window.removeEventListener("scroll", keepScrollLocked);
+    };
+  }, [isMobileMenuOpen]);
+
+  /* Escape closes, resize keeps the page card correct (and closes when switching to desktop) */
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsMobileMenuOpen(false);
+    };
+    const onResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsMobileMenuOpen(false);
+        return;
+      }
+      shellGeo.current.vw = window.innerWidth;
+      shellGeo.current.vh = window.innerHeight;
+      applyShell(MENU_P.get());
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [isMobileMenuOpen, MENU_P, applyShell]);
+
+  /* Never leave the page scaled / scroll-locked if the navbar unmounts */
+  useEffect(() => {
+    return () => {
+      menuCtl.current?.stop();
+      restoreShell();
+    };
+  }, [restoreShell]);
+
   const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
 
   const forcePill = () => {
@@ -952,6 +1261,12 @@ export function Navbar() {
   const scrimColor = boost > 0 ? (glassTheme === "dark" ? `rgba(10,10,12,${boost})` : `rgba(255,255,255,${boost})`) : null;
   const scrim = scrimColor ? `linear-gradient(${scrimColor},${scrimColor})` : undefined;
   const mobTint = rgba(LOOKS[glassTheme][1]);
+  const menuBg = glassTheme === "dark" ? MENU_BG_DARK : MENU_BG_LIGHT;
+
+  const menuOpen = isMobileMenuOpen;
+  const itemState = menuOpen ? "visible" : "hidden";
+  const isDarkNow = currentTheme === "dark";
+  const ThemeIcon = isDarkNow ? Sun : Moon;
 
   return (
     <>
@@ -1005,46 +1320,100 @@ export function Navbar() {
         </svg>
       )}
 
-      {/* ═══ Mobile: the same glass recipe, applied straight to the bar ═══ */}
+      {/* ═══ Mobile: header bar (logo left, theme + hamburger right).
+          The glass lives on its own layer so it can fade out while the menu is open,
+          and the content uses theme text color over the frosted liquid glass. ═══ */}
       <div className="md:hidden fixed top-0 left-0 w-full z-50 px-3 pt-3 pointer-events-none">
         <div
           ref={mobileBarRef}
           data-lg={glassTheme}
-          className="lg-shade lg-ink relative pointer-events-auto mx-auto flex items-center justify-between gap-2 h-14 pl-4 pr-2.5 rounded-full"
-          style={{
-            backgroundColor: mobTint,
-            backgroundImage: scrim,
-            backdropFilter: mobBackdrop,
-            WebkitBackdropFilter: mobBackdrop,
-            opacity: glassReady ? 1 : 0,
-            transition: GLASS_FADE,
-          }}
+          className="lg-ink relative pointer-events-auto mx-auto h-14 rounded-full"
+          style={{ color: "var(--text-primary)", transition: "color .3s ease" }}
         >
-          <Link href="/" className="relative z-10 flex items-center gap-2 min-w-0 active:scale-95 transition-transform">
-            <Logo className="w-7 h-7 shrink-0" priority />
-            <span className="font-bold text-lg tracking-tighter truncate text-[color:var(--text-primary)]">
-              Hrithik.
-            </span>
-          </Link>
-          <div className="relative z-10 flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              suppressHydrationWarning
-              aria-label="Toggle theme"
-              onClick={toggleTheme}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] active:scale-90 transition-transform"
-            >
-              {mounted ? (resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />) : <Sun size={16} />}
-            </button>
-            <button
-              type="button"
-              suppressHydrationWarning
-              aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="w-9 h-9 flex items-center justify-center rounded-full text-[color:var(--text-primary)] active:scale-90 transition-transform"
-            >
-              {isMobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
-            </button>
+          {/* Glass layer (never put opacity/filter on an ancestor of this layer) */}
+          <div
+            aria-hidden="true"
+            className="lg-shade absolute inset-0 rounded-full pointer-events-none"
+            style={{
+              backgroundColor: mobTint,
+              backgroundImage: scrim,
+              backdropFilter: mobBackdrop,
+              WebkitBackdropFilter: mobBackdrop,
+              opacity: glassReady && !menuOpen ? 1 : 0,
+              transition: GLASS_FADE,
+            }}
+          />
+
+          {/* Header content */}
+          <div
+            className="relative z-10 flex h-full items-center justify-between gap-2 pl-4 pr-2.5"
+            style={{ opacity: glassReady ? 1 : 0, transition: GLASS_FADE }}
+          >
+            <Link href="/" className="relative z-10 flex items-center gap-2 min-w-0 active:scale-95 transition-transform">
+              <Logo className="w-7 h-7 shrink-0" priority />
+              <span
+                className="font-bold text-lg tracking-tighter truncate text-[color:var(--text-primary)]"
+              >
+                Hrithik.
+              </span>
+            </Link>
+            <div className="relative z-10 flex items-center gap-1.5 shrink-0">
+              {/* Theme toggle: fades away while the menu is open (it lives inside the menu then) */}
+              <button
+                type="button"
+                suppressHydrationWarning
+                aria-label="Toggle theme"
+                onClick={toggleTheme}
+                tabIndex={menuOpen ? -1 : 0}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] active:scale-90"
+                style={{
+                  opacity: menuOpen ? 0 : 1,
+                  transform: menuOpen ? "scale(0.6)" : "scale(1)",
+                  pointerEvents: menuOpen ? "none" : "auto",
+                  transition: "opacity .25s ease, transform .35s cubic-bezier(.32,.72,0,1)",
+                }}
+              >
+                {mounted ? (resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />) : <Sun size={16} />}
+              </button>
+
+              {/* Hamburger <-> X (sits on the right, like the reference's search/close slot mirrored) */}
+              <button
+                type="button"
+                suppressHydrationWarning
+                aria-label={menuOpen ? "Close menu" : "Open menu"}
+                aria-expanded={menuOpen}
+                onClick={() => (menuOpen ? closeMenu() : openMenu())}
+                className="relative w-9 h-9 flex items-center justify-center rounded-full active:scale-90"
+                style={{
+                  color: "var(--text-primary)",
+                  backgroundColor: menuOpen
+                    ? glassTheme === "dark"
+                      ? "rgba(255,255,255,0.14)"
+                      : "rgba(0,0,0,0.08)"
+                    : "transparent",
+                  transition: "background-color .35s ease, color .3s ease, transform .2s ease",
+                }}
+              >
+                <Menu
+                  size={22}
+                  className="absolute"
+                  style={{
+                    opacity: menuOpen ? 0 : 1,
+                    transform: menuOpen ? "rotate(90deg) scale(0.5)" : "rotate(0deg) scale(1)",
+                    transition: "opacity .25s ease, transform .4s cubic-bezier(.32,.72,0,1)",
+                  }}
+                />
+                <X
+                  size={20}
+                  className="absolute"
+                  style={{
+                    opacity: menuOpen ? 1 : 0,
+                    transform: menuOpen ? "rotate(0deg) scale(1)" : "rotate(-90deg) scale(0.5)",
+                    transition: "opacity .25s ease .05s, transform .4s cubic-bezier(.32,.72,0,1)",
+                  }}
+                />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1272,34 +1641,57 @@ export function Navbar() {
         </button>
       </div>
 
-      {/* ═══ Mobile Menu Drawer (UNTOUCHED) ═══ */}
-      <AnimatePresence>
-        {isMobileMenuOpen && (
-          <m.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed inset-0 z-40 md:hidden bg-[color:var(--background)] pt-20 px-6 flex flex-col justify-between pb-8"
+      {/* ═══ Mobile menu: frosted liquid glass layer that sits BEHIND the shrinking page.
+          Items are right-aligned (mirror of the reference) and slide in from the right. ═══ */}
+      {menuMounted && (
+        <div
+          ref={menuLayerRef}
+          data-lg={glassTheme}
+          className="lg-ink fixed inset-0 z-40 md:hidden overflow-hidden"
+          style={{
+            opacity: 0,
+            background: menuBg,
+            backdropFilter: "blur(28px) saturate(180%)",
+            WebkitBackdropFilter: "blur(28px) saturate(180%)",
+            borderLeft: glassTheme === "dark" ? "1px solid rgba(255, 255, 255, 0.12)" : "1px solid rgba(0, 0, 0, 0.08)",
+            boxShadow:
+              glassTheme === "dark"
+                ? "inset 1px 0 0 rgba(255,255,255,0.1), inset 0 1px 0 rgba(255,255,255,0.15)"
+                : "inset 1px 0 0 rgba(255,255,255,0.6), inset 0 1px 0 rgba(255,255,255,0.8)",
+            touchAction: "none",
+          }}
+          aria-hidden={!menuOpen}
+        >
+          <nav
+            ref={menuNavRef}
+            aria-label="Mobile navigation"
+            className="absolute inset-0 flex flex-col items-end pr-7"
+            style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 112px)" }}
           >
-            <div className="flex flex-col gap-3">
+            {/* Group 1: main pages */}
+            <div className="flex flex-col items-end">
               {navLinks.map((link, i) => {
+                const Icon = MENU_ICONS[link.name];
                 const isActive = pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href));
                 return (
                   <m.div
                     key={link.name}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05 }}
+                    custom={i}
+                    variants={menuItemVariants}
+                    initial="hidden"
+                    animate={itemState}
                   >
                     <Link
                       href={link.href}
+                      tabIndex={menuOpen ? 0 : -1}
                       onClick={(e) => handleNavClick(e, link.href)}
-                      className={`flex items-center justify-between w-full px-6 py-4 rounded-full text-lg font-bold transition-all border ${
+                      className={`${menuRowClass} ${
                         isActive
-                          ? "bg-[color:var(--text-primary)] text-[color:var(--background)] border-transparent"
-                          : "bg-[color:var(--text-primary)]/5 text-[color:var(--text-secondary)] border-[color:var(--border)]"
+                          ? "font-bold bg-[color:var(--text-primary)]/10 border border-[color:var(--border)] shadow-sm"
+                          : "font-medium opacity-85 hover:opacity-100"
                       }`}
                     >
+                      <Icon size={20} strokeWidth={1.8} className="shrink-0" />
                       <span>{link.name}</span>
                     </Link>
                   </m.div>
@@ -1307,32 +1699,50 @@ export function Navbar() {
               })}
             </div>
 
-            {/* Mobile Actions: Resume & Contact */}
-            <m.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.25 }}
-              className="flex flex-col gap-3"
-            >
-              <Link
-                href="/resume"
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="flex items-center justify-center gap-2 w-full py-4 rounded-full bg-[color:var(--text-primary)] text-[color:var(--background)] font-bold text-base"
-              >
-                <span>View Resume</span>
-                <ArrowUpRight size={16} />
-              </Link>
-              <Link
-                href="/contact"
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="flex items-center justify-center gap-2 w-full py-4 rounded-full border border-[color:var(--border)] text-[color:var(--text-primary)] font-bold text-base"
-              >
-                <span>Get in Touch</span>
-              </Link>
-            </m.div>
-          </m.div>
-        )}
-      </AnimatePresence>
+            {/* Group 2: Resume + Contact */}
+            <div className="mt-6 flex flex-col items-end">
+              <m.div custom={navLinks.length} variants={menuItemVariants} initial="hidden" animate={itemState}>
+                <Link
+                  href="/resume"
+                  tabIndex={menuOpen ? 0 : -1}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`${menuRowClass} font-medium opacity-85 hover:opacity-100 active:opacity-60`}
+                >
+                  <FileText size={20} strokeWidth={1.8} className="shrink-0" />
+                  <span>Resume</span>
+                </Link>
+              </m.div>
+              <m.div custom={navLinks.length + 1} variants={menuItemVariants} initial="hidden" animate={itemState}>
+                <Link
+                  href="/contact"
+                  tabIndex={menuOpen ? 0 : -1}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`${menuRowClass} font-medium opacity-85 hover:opacity-100 active:opacity-60`}
+                >
+                  <Mail size={20} strokeWidth={1.8} className="shrink-0" />
+                  <span>Contact</span>
+                </Link>
+              </m.div>
+            </div>
+
+            {/* Group 3: theme toggle (takes the place of "Logout" in the reference) */}
+            <div className="mt-6 flex flex-col items-end">
+              <m.div custom={navLinks.length + 2} variants={menuItemVariants} initial="hidden" animate={itemState}>
+                <button
+                  type="button"
+                  suppressHydrationWarning
+                  tabIndex={menuOpen ? 0 : -1}
+                  onClick={toggleTheme}
+                  className={`${menuRowClass} font-medium opacity-85 hover:opacity-100 active:opacity-60`}
+                >
+                  <ThemeIcon size={20} strokeWidth={1.8} className="shrink-0" />
+                  <span>{isDarkNow ? "Light mode" : "Dark mode"}</span>
+                </button>
+              </m.div>
+            </div>
+          </nav>
+        </div>
+      )}
     </>
   );
 }

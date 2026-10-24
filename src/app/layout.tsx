@@ -77,13 +77,15 @@ export default function RootLayout({
 
               <Navbar />
 
-              <main className="flex-1 w-full relative z-[1]">
-                <ErrorBoundary>
-                  {children}
-                </ErrorBoundary>
-              </main>
+              <div id="page-shell" className="flex-1 w-full flex flex-col relative">
+                <main className="flex-1 w-full relative z-[1]">
+                  <ErrorBoundary>
+                    {children}
+                  </ErrorBoundary>
+                </main>
 
-              <Footer />
+                <Footer />
+              </div>
             </LenisProvider>
           </IntroProvider>
         </ThemeProvider>
