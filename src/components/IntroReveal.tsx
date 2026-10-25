@@ -5,10 +5,15 @@ import gsap from "gsap";
 import { CustomEase } from "gsap/CustomEase";
 import { SplitText } from "gsap/SplitText";
 import { useIntro } from "@/context/IntroContext";
+import { useTheme } from "@/components/ThemeProvider";
+import { IntroHeroSvg } from "./IntroHeroSvg";
+import { useHeroScroll } from "./useHeroScroll";
+import HalftoneReveal from "@/components/HalftoneReveal/HalftoneReveal";
 import "./IntroReveal.css";
 
 export function IntroReveal() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const { introDone, setIntroDone, shouldRunIntro } = useIntro();
   const [isFinished, setIsFinished] = useState(() => {
     if (typeof window !== "undefined" && window.location.search.includes("test_intro=1")) {
@@ -17,13 +22,51 @@ export function IntroReveal() {
     return introDone || !shouldRunIntro;
   });
 
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState<string>("dark");
+
+  useEffect(() => {
+    setMounted(true);
+    const getTheme = () => {
+      const docTheme =
+        typeof document !== "undefined"
+          ? document.documentElement.getAttribute("data-theme")
+          : null;
+      return docTheme || resolvedTheme || "dark";
+    };
+    setCurrentTheme(getTheme());
+
+    if (typeof document !== "undefined") {
+      const observer = new MutationObserver(() => {
+        setCurrentTheme(getTheme());
+      });
+
+      observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["data-theme"],
+      });
+
+      return () => observer.disconnect();
+    }
+  }, [resolvedTheme]);
+
+  const isLight = mounted && currentTheme === "light";
+  const paperColor = isLight ? "#f4f4f4" : "#0a0a0a";
+
   useEffect(() => {
     const isTestMode =
       typeof window !== "undefined" && window.location.search.includes("test_intro=1");
 
     // If intro is not supposed to run or is already done, mark finished immediately
-    if (!isTestMode && (introDone || !shouldRunIntro)) {
+    if (!isTestMode && (introDone || !shouldRunIntro || isFinished)) {
       setIsFinished(true);
+      return;
+    }
+
+    // In test mode, if isFinished was true, reset it to re-mount the preloader
+    if (isTestMode && isFinished) {
+      setIsFinished(false);
       return;
     }
 
@@ -363,22 +406,45 @@ export function IntroReveal() {
             6
           )
           .to(
-            ".container .card",
+            [".container .card", ".container .hero-shapes-wrapper"],
             {
               clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
               duration: 0.75,
             },
             6.25
           )
+          // Phase 1: "Hey there!" entrance animation
           .to(
-            ".container .card h1 .char span",
+            ".container .card-title-1 .char span",
             {
               y: "0%",
-              duration: 0.75,
-              stagger: 0.05,
+              duration: 0.65,
+              stagger: 0.04,
             },
-            6.5
-          );
+            6.7
+          )
+          // Phase 2: "Hey there!" reverse animation (after clear reading pause)
+          .to(
+            ".container .card-title-1 .char span",
+            {
+              y: "100%",
+              duration: 0.5,
+              stagger: 0.03,
+            },
+            8.6
+          )
+          // Phase 3: "I'm Hrithik" entrance animation
+          .to(
+            ".container .card-title-2 .char span",
+            {
+              y: "0%",
+              duration: 0.7,
+              stagger: 0.04,
+            },
+            9.2
+          )
+          // Hold settle buffer so final text is fully settled before timeline completes
+          .set({}, {}, 10.6);
       }, containerRef);
     };
 
@@ -393,7 +459,10 @@ export function IntroReveal() {
         ctx.revert();
       }
     };
-  }, [introDone, shouldRunIntro, setIntroDone]);
+  }, [introDone, shouldRunIntro, setIntroDone, isFinished]);
+
+  // Scroll-driven rings, liquid contact and the card's subtle impact wobble (see useHeroScroll.ts)
+  useHeroScroll(containerRef, cardRef);
 
   const handleScrollDown = () => {
     const homeEl = document.getElementById("home");
@@ -446,13 +515,31 @@ export function IntroReveal() {
       )}
 
       {/* Hero View: revealed by the preloader, then remains as the top hero section */}
-      <div className="container">
+      <div className="container w-full max-w-none m-0">
         <div className="hero-img">
-          <img src="/intro-hero.jpg" alt="Hrithik Intro Hero" />
+          <div className="hero-shapes-wrapper">
+            <IntroHeroSvg />
+          </div>
         </div>
 
-        <div className="card">
-          <h1>Portfolio</h1>
+        <div className="card" ref={cardRef}>
+          <div className="card-halftone">
+            <HalftoneReveal
+              src="/images/hero-halftone.png"
+              mode="mono"
+              shape="dot"
+              cellSize={3}
+              angle={45}
+              inkColor="#ef4444"
+              paperColor={paperColor}
+              revealRadius={160}
+              style={{ width: "100%", height: "100%" }}
+            />
+          </div>
+          <div className="card-titles">
+            <h1 className="card-title card-title-1">Hey there!</h1>
+            <h1 className="card-title card-title-2">I&apos;m Hrithik</h1>
+          </div>
         </div>
 
         <footer>
@@ -461,6 +548,7 @@ export function IntroReveal() {
             onClick={handleScrollDown}
             className="scroll-down-btn"
             aria-label="Scroll down to content"
+            suppressHydrationWarning
           >
             <p>Scroll Down</p>
           </button>

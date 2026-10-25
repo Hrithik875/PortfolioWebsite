@@ -15,6 +15,8 @@
   box-sizing: border-box;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  width: 100% !important;
+  max-width: none !important;
 }
 
 .intro-reveal *,
@@ -29,6 +31,7 @@
   position: fixed;
   inset: 0;
   width: 100vw;
+  max-width: none !important;
   height: 100svh;
   z-index: 99999;
   overflow: hidden;
@@ -38,11 +41,13 @@
 .intro-reveal.is-done {
   position: relative;
   width: 100%;
+  max-width: none !important;
   height: 100svh;
   min-height: 100svh;
   z-index: 10;
   overflow: hidden;
-  background-color: #0a0a0a;
+  background-color: var(--background);
+  transition: background-color 0.6s ease;
 }
 
 .intro-reveal img {
@@ -152,7 +157,9 @@
 
 .intro-reveal .container {
   position: relative;
-  width: 100%;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
   height: 100%;
   min-height: 100svh;
   display: flex;
@@ -162,8 +169,10 @@
   z-index: 2;
 }
 
+/* Once the intro is over a full-rect clip is a visual no-op, but it would still force the
+   browser to mask these layers every frame while the rings move - so drop it. */
 .intro-reveal.is-done .container {
-  clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%) !important;
+  clip-path: none !important;
 }
 
 .intro-reveal .container .hero-img {
@@ -172,6 +181,101 @@
   left: 0;
   width: 100%;
   height: 100%;
+  overflow: hidden;
+  z-index: 1;
+  background-color: #d20c0c;
+}
+
+.intro-reveal .hero-shapes-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  clip-path: polygon(0 50%, 100% 50%, 100% 50%, 0 50%);
+  will-change: clip-path;
+  pointer-events: none;
+}
+
+.intro-reveal.is-done .hero-shapes-wrapper {
+  clip-path: none !important;
+  will-change: auto;
+}
+
+/* ── Hero shapes ─────────────────────────────────────────────────────────
+   Each ring is its own small SVG = its own GPU layer. JS (useHeroScroll) only
+   ever changes its `transform`, so scrolling never repaints the artwork.
+   Position/size come from three variables kept in sync with the card:
+     --k  px per art unit   --cl  gutter left of the card   --cy  vertical centre
+   The defaults below are a 1920x1080 fallback for the very first paint. */
+.intro-reveal .hero-stage {
+  position: absolute;
+  inset: 0;
+  --k: 1.875;
+  --cl: 672px;
+  --cy: 540px;
+  pointer-events: none;
+}
+
+/* each half is clipped at the centre line, so rings that slip under the card
+   can never poke out on the opposite side */
+.intro-reveal .hero-side {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+
+.intro-reveal .hero-side-left {
+  left: 0;
+  right: 50%;
+}
+
+.intro-reveal .hero-side-right {
+  left: 50%;
+  right: 0;
+}
+
+.intro-reveal .hero-ring,
+.intro-reveal .hero-bridge {
+  position: absolute;
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.intro-reveal .hero-ring {
+  transform: translate3d(0, 0, 0);
+  transform-origin: 50% 50%;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* the right bridge is the left one mirrored, so JS writes one path to both */
+.intro-reveal .hero-bridge-right {
+  transform: scaleX(-1);
+}
+
+/* In Dark mode (default):
+   Invert colors: white becomes black and black becomes white */
+.intro-reveal .container .hero-img .hero-shape-black {
+  fill: #ffffff;
+  transition: fill 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.intro-reveal .container .hero-img .hero-shape-white {
+  fill: #000000;
+  transition: fill 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* In Light mode:
+   Invert colors back: white becomes white, black becomes black */
+[data-theme="light"] .intro-reveal .container .hero-img .hero-shape-black {
+  fill: #000000;
+}
+
+[data-theme="light"] .intro-reveal .container .hero-img .hero-shape-white {
+  fill: #ffffff;
 }
 
 .intro-reveal footer {
@@ -183,21 +287,22 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #fff;
-  z-index: 2;
+  color: var(--text-primary);
+  z-index: 3;
+  transition: color 0.6s ease;
 }
 
 .intro-reveal .scroll-down-btn {
   background: transparent;
   border: none;
-  color: #fff;
+  color: inherit;
   cursor: pointer;
   padding: 0;
   font: inherit;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, color 0.6s ease;
 }
 
 .intro-reveal .scroll-down-btn:hover {
@@ -214,20 +319,60 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: #fff;
-  color: #000;
+  background-color: var(--surface);
+  color: var(--primary);
   clip-path: polygon(0 50%, 100% 50%, 100% 50%, 0 50%);
+  transition: background-color 0.6s ease, color 0.6s ease;
+  will-change: transform;
+  z-index: 3;
 }
 
 .intro-reveal.is-done .card {
-  clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%) !important;
+  clip-path: none !important;
+}
+
+/* Halftone art fills the card and stays clipped to it */
+.intro-reveal .card-halftone {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+/* Card titles container */
+.intro-reveal .card-titles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .intro-reveal .card h1 {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   text-align: center;
   width: 100%;
-  font-size: 3rem;
-  color: #000;
+  height: 100%;
+  padding: 0 1rem;
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  white-space: nowrap;
+  color: var(--primary);
+  transition: color 0.6s ease;
+  z-index: 1;
+  pointer-events: none;
+  margin: 0;
+}
+
+.intro-reveal .card .word {
+  display: inline-block;
+  margin-right: 0.28em;
+}
+
+.intro-reveal .card .word:last-child {
+  margin-right: 0;
 }
 
 .intro-reveal .card .char span {
@@ -237,8 +382,11 @@
   will-change: transform;
 }
 
-.intro-reveal.is-done .card .char span,
-.intro-reveal.is-done .card h1 {
+.intro-reveal.is-done .card-title-1 {
+  display: none !important;
+}
+
+.intro-reveal.is-done .card-title-2 .char span {
   transform: translateY(0%) !important;
 }
 
