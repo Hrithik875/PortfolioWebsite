@@ -51,6 +51,7 @@ type Controls = { stop: () => void };
 type RGBA = [number, number, number, number];
 
 /* ── Layout tunables ─────────────────────────────────────────────────────── */
+const DESKTOP_MIN_WIDTH = 1009; // <= 1008px phone version, > 1008px desktop version
 const CANVAS_W = 1400; // drawing area of the liquid shape (centered on page)
 const CANVAS_H = 104;
 const OX = CANVAS_W / 2; // x = 0 (page center) inside the canvas
@@ -1020,7 +1021,7 @@ export function Navbar() {
     const measure = () => {
       const vw = window.innerWidth;
       dimsRef.current = { top: Math.min(1040, vw - 180), pill: Math.min(840, vw - 180) };
-      return vw >= 768;
+      return vw >= DESKTOP_MIN_WIDTH;
     };
     desktopRef.current = measure();
 
@@ -1063,34 +1064,113 @@ export function Navbar() {
     };
   }, [introDone, go, applyPhase, render, clearTimers]);
 
-  /* ── Scroll: same thresholds as before, but direction-based and event-driven ── */
+  /* ── Scroll: hysteresis + jitter suppression + minimum dwell time ── */
   useEffect(() => {
     if (!mounted || !introDone) return;
     let lastY = window.scrollY || 0;
     let accum = 0;
+    let lastDir = 0;
+    let lastPhaseChangeTime = performance.now();
+    let reversalTimes: number[] = [];
+    let jitterTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const MIN_PHASE_DWELL = 450; // ms: prevent rapid thrashing of expanding/contracting
+    const ACCUM_COLLAPSE = 65; // px: deliberate downward scroll to collapse pill into sphere
+    const ACCUM_EXPAND = -65; // px: deliberate upward scroll to expand sphere into pill
+    const FORCED_COLLAPSE = 90; // px: required downward scroll if sphere was manually expanded
+
     const onScroll = () => {
       const y = window.scrollY || 0;
       const dy = y - lastY;
       lastY = y;
       if (!desktopRef.current || dy === 0) return;
+
+      const now = performance.now();
+      const currentDir = Math.sign(dy);
+
+      // Track direction reversals within a sliding 800ms window
+      if (lastDir !== 0 && currentDir !== lastDir) {
+        reversalTimes.push(now);
+        reversalTimes = reversalTimes.filter((t) => now - t < 800);
+      }
+      lastDir = currentDir;
+
+      // Reset reversal buffer after scrolling stops
+      if (jitterTimer) clearTimeout(jitterTimer);
+      jitterTimer = setTimeout(() => {
+        reversalTimes = [];
+      }, 500);
+
+      // Accumulate scroll in the same direction, or start fresh on reversal
       accum = Math.sign(dy) === Math.sign(accum) ? accum + dy : dy;
 
-      let next: Phase | null = null;
-      if (progRef.current) next = y < 50 ? "top" : "pill";
-      else if (y < 50) next = "top";
-      else if (y < 250) next = "pill";
-      else if (forcedRef.current) {
-        if (accum > 80) {
-          forcedRef.current = false;
-          next = "sphere";
-        } else next = "pill";
-      } else if (accum > 24) next = "sphere";
-      else if (accum < -24) next = "pill";
+      // Rapid up-and-down oscillation detection (2 or more reversals in 800ms)
+      const isJittering = reversalTimes.length >= 2;
 
-      if (next) go(next);
+      const currentPhase = phaseRef.current;
+
+      // Respect minimum dwell time between phase changes (always allow instant return to top)
+      const timeSinceChange = now - lastPhaseChangeTime;
+      if (timeSinceChange < MIN_PHASE_DWELL) {
+        if (y <= 25 && currentPhase !== "top") {
+          lastPhaseChangeTime = now;
+          accum = 0;
+          reversalTimes = [];
+          go("top");
+        }
+        return;
+      }
+
+      let next: Phase | null = null;
+
+      // Programmatic scroll (e.g. clicking nav link): keep navbar open
+      if (progRef.current) {
+        next = y < 50 ? "top" : "pill";
+      } else if (currentPhase === "top") {
+        // Exit top into pill with hysteresis threshold at y >= 75
+        if (y >= 75) {
+          next = "pill";
+        }
+      } else if (currentPhase === "pill") {
+        // Return to top if user scrolls up near top of page (y <= 35)
+        if (y <= 35) {
+          next = "top";
+        } else if (forcedRef.current) {
+          // If manually expanded via sphere click, require deliberate downward scroll
+          if (accum >= FORCED_COLLAPSE && !isJittering) {
+            forcedRef.current = false;
+            next = "sphere";
+          }
+        } else if (y >= 280 && !isJittering && accum >= ACCUM_COLLAPSE) {
+          // Only collapse to sphere past 280px with deliberate, sustained downward scroll
+          next = "sphere";
+        }
+      } else if (currentPhase === "sphere") {
+        // If scrolled back up near top of page, expand immediately
+        if (y <= 35) {
+          next = "top";
+        } else if (y <= 180) {
+          // Automatic expansion below 180px threshold
+          next = "pill";
+        } else if (!isJittering && accum <= ACCUM_EXPAND) {
+          // Expand to pill on deliberate upward scroll
+          next = "pill";
+        }
+      }
+
+      if (next && next !== currentPhase) {
+        lastPhaseChangeTime = now;
+        accum = 0;
+        reversalTimes = [];
+        go(next);
+      }
     };
+
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (jitterTimer) clearTimeout(jitterTimer);
+    };
   }, [mounted, introDone, go]);
 
   /* Route settled: close the drawer, drop the optimistic active item, and sync navbar phase to scroll */
@@ -1184,7 +1264,7 @@ export function Navbar() {
       if (e.key === "Escape") setIsMobileMenuOpen(false);
     };
     const onResize = () => {
-      if (window.innerWidth >= 768) {
+      if (window.innerWidth >= DESKTOP_MIN_WIDTH) {
         setIsMobileMenuOpen(false);
         return;
       }
@@ -1323,7 +1403,7 @@ export function Navbar() {
       {/* ═══ Mobile: header bar (logo left, theme + hamburger right).
           The glass lives on its own layer so it can fade out while the menu is open,
           and the content uses theme text color over the frosted liquid glass. ═══ */}
-      <div className="md:hidden fixed top-0 left-0 w-full z-50 px-3 pt-3 pointer-events-none">
+      <div className="min-[1009px]:hidden fixed top-0 left-0 w-full z-50 px-3 pt-3 pointer-events-none">
         <div
           ref={mobileBarRef}
           data-lg={glassTheme}
@@ -1421,7 +1501,7 @@ export function Navbar() {
       {/* ═══ Desktop: one liquid shape + GPU-moved content ═══ */}
       <div
         data-lg={glassTheme}
-        className="lg-ink hidden md:block fixed top-0 left-0 w-full z-50 pointer-events-none"
+        className="lg-ink hidden min-[1009px]:block fixed top-0 left-0 w-full z-50 pointer-events-none"
         style={{ height: CANVAS_H }}
       >
         {/* Liquid layer: pill + logo sphere + theme drop.
@@ -1647,7 +1727,7 @@ export function Navbar() {
         <div
           ref={menuLayerRef}
           data-lg={glassTheme}
-          className="lg-ink fixed inset-0 z-40 md:hidden overflow-hidden"
+          className="lg-ink fixed inset-0 z-40 min-[1009px]:hidden overflow-hidden"
           style={{
             opacity: 0,
             background: menuBg,

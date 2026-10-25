@@ -7,7 +7,7 @@ import React from "react";
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query) => ({
-    matches: query.includes("min-width: 768px"),
+    matches: query.includes("min-width: 768px") || query.includes("min-width: 1009px"),
     media: query,
     onchange: null,
     addListener: vi.fn(),
@@ -17,6 +17,7 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: vi.fn(),
   })),
 });
+window.innerWidth = 1200;
 
 // Mock CSS.supports for jsdom
 if (typeof window.CSS === "undefined") {
