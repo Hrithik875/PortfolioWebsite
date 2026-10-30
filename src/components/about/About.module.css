@@ -1,0 +1,203 @@
+/* Reference viewport: 1918x988. Units are vw/vh so the composition scales.
+   Theme colours come from globals.css:  --about-rgb (background)  --about-fg (text)  */
+
+.root {
+  position: relative;
+  z-index: 11;                 /* above the hero (z-index 10), below the next section (z-index 12) */
+  height: 235vh;
+  color: rgb(var(--about-fg, 240, 240, 240));
+  font-family: var(--font-about-sans), "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  font-synthesis: none;
+}
+
+/* ── Background + blurred feather. This layer is what "scrolls faster than the hero". ──
+   It is taller than the section by --overlap so that, once it has finished moving up,
+   its bottom edge lands exactly on the section's bottom edge (no gap before the next section). */
+.bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(100% + var(--overlap, 35vh));
+  background: rgb(var(--about-rgb, 10, 10, 10));
+  will-change: transform;
+}
+
+/* Feather = the "blurry spread" that hangs ABOVE the About background and dissolves the hero.
+   NOTE: never put opacity / filter / mask on .root or .bg — that would make them a "backdrop root"
+   and the backdrop-filter below would stop seeing the hero. */
+.feather {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: var(--feather, 35vh);
+  pointer-events: none;
+}
+
+.featherTint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--about-rgb, 10, 10, 10), 0) 0%,
+    rgba(var(--about-rgb, 10, 10, 10), 0.16) 24%,
+    rgba(var(--about-rgb, 10, 10, 10), 0.48) 52%,
+    rgba(var(--about-rgb, 10, 10, 10), 0.82) 80%,
+    rgb(var(--about-rgb, 10, 10, 10)) 100%
+  );
+}
+
+/* Three stacked backdrop blurs, each masked to a different band = a progressive blur
+   (sharp at the top of the feather, very soft where it meets the About background). */
+.featherBlur {
+  position: absolute;
+  inset: 0;
+  -webkit-backdrop-filter: blur(var(--b));
+  backdrop-filter: blur(var(--b));
+  -webkit-mask-image: linear-gradient(to bottom, transparent var(--m0), #000 var(--m1));
+  mask-image: linear-gradient(to bottom, transparent var(--m0), #000 var(--m1));
+}
+.fb1 { --b: 3px;  --m0: 0%;  --m1: 35%; }
+.fb2 { --b: 10px; --m0: 25%; --m1: 65%; }
+.fb3 { --b: 24px; --m0: 55%; --m1: 100%; }
+
+/* ── Portrait ──
+   position:fixed + a scroll-scrubbed transform = the portrait is NOT part of the page flow, so its
+   motion has exactly one source (a smoothed tween) instead of "page scroll + a correction". */
+.imageFixed {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 50.8vw;
+  height: 100vh;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.imageWrap {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100%;
+  height: var(--img-h, 120vh);
+  transform: translate3d(0, 150vh, 0);  /* parked off-screen until GSAP takes over (no flash) */
+  will-change: transform;
+}
+
+.imageClip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: -12vw;                          /* shape runs past the right edge so its blurred right edge is off-screen */
+  overflow: hidden;
+  background: rgb(var(--about-rgb, 10, 10, 10));
+  border-radius: 14vw 0 0 14vw;          /* same radius top and bottom */
+  will-change: filter;                   /* the blur is applied to the WHOLE shape (edges included), like the reference */
+}
+
+.image {
+  object-fit: cover;
+  object-position: 42% 30%;
+}
+
+/* page-colour veil: replaces "brightness" so the reveal also works on a white page */
+.veil {
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--about-rgb, 10, 10, 10));
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+/* ── Text ── */
+.content {
+  position: relative;
+  z-index: 2;
+  padding-top: 50vh;
+}
+
+.headline {
+  margin: 0 0 0 4.5vw;
+  max-width: 60.6vw;                /* reference: .about-text is 66.6% of (viewport - 2 x 4.5vw) */
+  /* From the reference's own CSS: line-height 1.45, letter-spacing -0.01em, colour #f0f0f0.
+     3.6vw (69px @1918) is what the measured 100px line pitch implies (100 / 1.45).
+     Family is set explicitly so a global h1-h6 rule can't override it. */
+  font-family: var(--font-about-sans), "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 480;
+  font-size: clamp(1.9rem, 3.6vw, 5.2rem);
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  color: rgb(var(--about-fg, 240, 240, 240));
+}
+
+.word {
+  display: inline-block;
+  will-change: opacity, filter;
+}
+
+/* Italic accent. The reference loads a custom font file for this ("other" = Machine.otf), which we can't
+   use, so this is the closest free match (Spectral Italic 400; stroke weight and proportions measured).
+   Size: ~72px vs the 69px headline = 1.05em. */
+.serif {
+  font-family: var(--font-about-serif), "Spectral", Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.05em;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.textBlock {
+  /* Reference @1918px: block starts at x=437 (22.8vw), longest line 475px, portrait edge at 49.2vw.
+     25.4vw is just wide enough for the reference's longest line to stay on one line, and the box's
+     right edge (48.2vw) still leaves a ~1vw gutter before the portrait. Don't widen past ~25.6vw. */
+  margin: 13vh 0 0 22.8vw;
+  width: 25.4vw;
+  min-width: 290px;
+  will-change: opacity, filter;
+}
+
+.paragraph {
+  margin: 0;
+  font-family: var(--font-about-sans), "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 480;
+  font-size: clamp(1rem, 1.8vw, 2.4rem);      /* fitted to the reference's paragraph line widths: 34.6px @1918 */
+  line-height: 1.57;                           /* reference line pitch 54.25px */
+  letter-spacing: -0.01em;
+  color: rgb(var(--about-fg, 240, 240, 240));
+}
+
+.info {
+  display: inline-block;
+  margin-top: 3.7vw;                           /* reference: 92px from last baseline to INFO cap-top @1918 */
+  font-family: var(--font-about-sans), "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 600;
+  font-size: clamp(0.8rem, 1.14vw, 1.7rem);   /* reference: cap height 16px => 21.8px @1918 */
+  line-height: 1.2;
+  letter-spacing: 0;
+  color: rgba(var(--about-fg, 240, 240, 240), 0.86);   /* reference INFO is #cfcfcf on #f0f0f0 text */
+  transition: color 0.2s ease;
+}
+.info:hover { color: rgb(var(--about-fg, 240, 240, 240)); }
+
+@media (max-width: 1023px) {
+  .imageFixed { width: 72vw; }
+  .imageWrap { height: 90vh; }
+  .imageClip { border-radius: 20vw 0 0 20vw; }
+  .content { padding-top: 40vh; }
+  .headline { margin-left: 6vw; max-width: 88vw; font-size: 8vw; }
+  .textBlock { margin: 11vh 0 0 6vw; width: 74vw; }
+  .paragraph { font-size: 4.8vw; }
+  .info { font-size: 3.6vw; margin-top: 8vw; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* no scroll effects: static, fully revealed layout */
+  .feather { display: none; }
+  .imageFixed { position: absolute; top: 0; height: 100%; }
+  .imageWrap { transform: none; top: 12vh; }
+  .veil { opacity: 0 !important; }
+  .imageClip { filter: none !important; }
+}

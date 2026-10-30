@@ -1,0 +1,15 @@
+.counter {
+  position: fixed;
+  left: 2.3vw;
+  top: 50vh;
+  translate: 0 -50%;
+  z-index: 50;
+  font-size: clamp(0.7rem, 0.85vw, 0.9rem);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--about-fg, 240, 240, 240));
+}
+
+@media (max-width: 1023px) {
+  .counter { display: none; }
+}
