@@ -202,6 +202,7 @@
   will-change: auto;
 }
 
+
 /* ── Hero shapes ─────────────────────────────────────────────────────────
    Each ring is its own small SVG = its own GPU layer. JS (useHeroScroll) only
    ever changes its `transform`, so scrolling never repaints the artwork.
