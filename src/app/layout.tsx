@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "lenis/dist/lenis.css";
+import { Instrument_Serif, Inter_Tight, Public_Sans, Spectral } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { IntroProvider } from "@/context/IntroContext";
 import { LenisProvider } from "@/components/LenisProvider";
@@ -8,6 +10,37 @@ import { GlobalBackgroundLoader } from "@/components/GlobalBackgroundLoader";
 import { Footer } from "@/components/Footer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PreventZoom } from "@/components/PreventZoom";
+
+const serif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: "italic",
+  variable: "--font-serif",
+  display: "swap",
+});
+
+// Inter Tight — tight neo-grotesk used by the About headline and paragraph.
+const sans = Inter_Tight({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-sans-tight",
+  display: "swap",
+});
+
+// Public Sans is a variable font on Google Fonts: omit `weight` so font-weight 480 works.
+const aboutSans = Public_Sans({
+  subsets: ["latin"],
+  variable: "--font-about-sans",
+  display: "swap",
+});
+
+const aboutSerif = Spectral({
+  subsets: ["latin"],
+  weight: "400",
+  style: "italic",
+  variable: "--font-about-serif",
+  display: "swap",
+});
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -39,7 +72,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className="intro-loading">
+    <html lang="en" suppressHydrationWarning className={`intro-loading ${sans.variable} ${aboutSans.variable} ${aboutSerif.variable}`}>
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -68,12 +101,12 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body suppressHydrationWarning className="relative antialiased min-h-screen flex flex-col bg-transparent text-[color:var(--text-primary)] overflow-x-hidden">
+      <body suppressHydrationWarning className={`${serif.variable} relative antialiased min-h-screen flex flex-col bg-transparent text-[color:var(--text-primary)] overflow-x-hidden`}>
         <PreventZoom />
         <ThemeProvider>
           <IntroProvider>
             <LenisProvider>
-              <GlobalBackgroundLoader />
+              {/* <GlobalBackgroundLoader /> */}
 
               <Navbar />
 
