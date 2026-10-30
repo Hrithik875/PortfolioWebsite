@@ -3,6 +3,7 @@ import { useEffect, type ReactNode } from "react";
 import { LazyMotion, domMax } from "framer-motion";
 import Lenis from "lenis";
 import { useIntro } from "@/context/IntroContext";
+import { gsap, ScrollTrigger } from "@/lib/gsap";
 
 export function LenisProvider({ children }: { children: ReactNode }) {
   const { introDone } = useIntro();
@@ -11,35 +12,35 @@ export function LenisProvider({ children }: { children: ReactNode }) {
     if (!introDone) return;
 
     let lenis: Lenis | null = null;
-    let rafId: number;
+    let tick: ((time: number) => void) | null = null;
 
     const init = () => {
-      // Skip Lenis on mobile — native touch inertia is better and Lenis adds JS overhead
-      if (window.innerWidth < 768) return;
+      // Touch devices / narrow screens keep native scrolling (syncTouch off)
+      if (window.innerWidth < 768) {
+        ScrollTrigger.refresh();
+        return;
+      }
 
       lenis = new Lenis({
-        duration: 1.2,
-        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-        orientation: "vertical",
-        gestureOrientation: "vertical",
+        lerp: 0.09,
         smoothWheel: true,
-        wheelMultiplier: 1,
-        touchMultiplier: 2,
+        wheelMultiplier: 0.9,
       });
 
-      const raf = (time: number) => {
-        lenis!.raf(time);
-        rafId = requestAnimationFrame(raf);
-      };
-      rafId = requestAnimationFrame(raf);
+      lenis.on("scroll", ScrollTrigger.update);
+      tick = (time: number) => lenis?.raf(time * 1000);
+      gsap.ticker.add(tick);
+      gsap.ticker.lagSmoothing(0);
+
+      ScrollTrigger.refresh();
     };
 
-    // Defer so Lenis RAF loop never competes with the initial paint / LCP
-    const timeout = setTimeout(init, 300);
+    // Defer so Lenis RAF loop never competes with initial paint
+    const timeout = setTimeout(init, 100);
 
     return () => {
       clearTimeout(timeout);
-      if (rafId) cancelAnimationFrame(rafId);
+      if (tick) gsap.ticker.remove(tick);
       lenis?.destroy();
     };
   }, [introDone]);
