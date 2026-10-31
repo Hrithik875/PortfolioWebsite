@@ -177,10 +177,10 @@ export function About() {
       {/* background + blurred feather that slides over the hero */}
       <div ref={bg} className={s.bg} aria-hidden="true">
         <div className={s.feather}>
-          <div className={s.featherTint} />
           <div className={`${s.featherBlur} ${s.fb1}`} />
           <div className={`${s.featherBlur} ${s.fb2}`} />
           <div className={`${s.featherBlur} ${s.fb3}`} />
+          <div className={s.featherTint} />
         </div>
       </div>
 
@@ -203,6 +203,7 @@ export function About() {
                   p.italic ? <em key={j} className={s.serif}>{p.text}</em> : <Fragment key={j}>{p.text}</Fragment>
                 )}
               </span>
+              {w.breakAfter ? <br className={s.break} /> : null}
               {w.spaceAfter ? " " : null}
             </Fragment>
           ))}

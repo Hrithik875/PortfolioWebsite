@@ -36,7 +36,7 @@ const aboutSans = Public_Sans({
 
 const aboutSerif = Spectral({
   subsets: ["latin"],
-  weight: "400",
+  weight: ["400", "600", "700"],
   style: "italic",
   variable: "--font-about-serif",
   display: "swap",

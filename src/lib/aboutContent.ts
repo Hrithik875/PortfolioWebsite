@@ -5,11 +5,15 @@ export type Span = { text: string; italic?: boolean };
 export const about = {
   /** Headline: mix roman + italic spans. Italic spans render in Instrument Serif Italic. */
   headline: [
-    { text: "As an " },
-    { text: "AI/ML engineer", italic: true },
-    { text: ", I build intelligent systems that think — blending technical " },
-    { text: "precision", italic: true },
-    { text: " and craft." },
+    { text: "Thoughtful by " },
+    { text: "design", italic: true },
+    { text: ", curious by " },
+    { text: "nature", italic: true },
+    { text: ",\nbringing ideas to life through " },
+    { text: "code", italic: true },
+    { text: " and " },
+    { text: "creativity", italic: true },
+    { text: "." },
   ] as Span[],
 
   paragraph:

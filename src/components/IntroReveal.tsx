@@ -8,12 +8,13 @@ import { useIntro } from "@/context/IntroContext";
 import { useTheme } from "@/components/ThemeProvider";
 import { IntroHeroSvg } from "./IntroHeroSvg";
 import { useHeroScroll } from "./useHeroScroll";
-import HalftoneReveal from "@/components/HalftoneReveal/HalftoneReveal";
+import HalftoneReveal, { type HalftoneRevealHandle } from "@/components/HalftoneReveal/HalftoneReveal";
 import "./IntroReveal.css";
 
 export function IntroReveal() {
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const halftoneRef = useRef<HalftoneRevealHandle>(null);
   const { introDone, setIntroDone, shouldRunIntro } = useIntro();
   const [isFinished, setIsFinished] = useState(() => {
     if (typeof window !== "undefined" && window.location.search.includes("test_intro=1")) {
@@ -78,6 +79,7 @@ export function IntroReveal() {
     ) {
       setIntroDone(true);
       setIsFinished(true);
+      halftoneRef.current?.startIntro();
       return;
     }
 
@@ -275,6 +277,7 @@ export function IntroReveal() {
             // Unmount preloader, unlock scroll, notify app
             setIsFinished(true);
             setIntroDone(true);
+            halftoneRef.current?.startIntro();
             if (typeof window !== "undefined") {
               window.scrollTo(0, 0);
             }
@@ -410,10 +413,13 @@ export function IntroReveal() {
             {
               clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
               duration: 0.75,
+              onComplete: () => {
+                halftoneRef.current?.startIntro(true);
+              },
             },
             6.25
           )
-          // Phase 1: "Hey there!" entrance animation
+          // Phase 1: "Hey there!" entrance animation (starts after dots bloom begins on fully displayed card)
           .to(
             ".container .card-title-1 .char span",
             {
@@ -421,7 +427,7 @@ export function IntroReveal() {
               duration: 0.65,
               stagger: 0.04,
             },
-            6.7
+            7.3
           )
           // Phase 2: "Hey there!" reverse animation (after clear reading pause)
           .to(
@@ -431,7 +437,7 @@ export function IntroReveal() {
               duration: 0.5,
               stagger: 0.03,
             },
-            8.6
+            8.9
           )
           // Phase 3: "I'm Hrithik" entrance animation
           .to(
@@ -441,10 +447,10 @@ export function IntroReveal() {
               duration: 0.7,
               stagger: 0.04,
             },
-            9.2
+            9.5
           )
           // Hold settle buffer so final text is fully settled before timeline completes
-          .set({}, {}, 10.6);
+          .set({}, {}, 11.0);
       }, containerRef);
     };
 
@@ -525,6 +531,7 @@ export function IntroReveal() {
         <div className="card" ref={cardRef}>
           <div className="card-halftone">
             <HalftoneReveal
+              ref={halftoneRef}
               src="/images/hero-halftone.png"
               mode="mono"
               shape="dot"
@@ -533,6 +540,8 @@ export function IntroReveal() {
               inkColor="#ef4444"
               paperColor={paperColor}
               revealRadius={160}
+              playIntro={isFinished}
+              introDuration={2.2}
               style={{ width: "100%", height: "100%" }}
             />
           </div>

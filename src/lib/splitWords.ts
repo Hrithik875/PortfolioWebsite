@@ -3,6 +3,7 @@ import type { Span } from "./aboutContent";
 export type WordToken = {
   parts: { text: string; italic: boolean }[];
   spaceAfter: boolean;
+  breakAfter?: boolean;
 };
 
 /**
@@ -17,7 +18,12 @@ export function buildWords(spans: Span[]): WordToken[] {
     for (const piece of span.text.split(/(\s+)/).filter(Boolean)) {
       const last = words[words.length - 1];
       if (/^\s+$/.test(piece)) {
-        if (last) last.spaceAfter = true;
+        if (last) {
+          last.spaceAfter = true;
+          if (piece.includes("\n")) {
+            last.breakAfter = true;
+          }
+        }
       } else if (last && !last.spaceAfter) {
         // Glue punctuation / continuation to the previous word
         last.parts.push({ text: piece, italic });

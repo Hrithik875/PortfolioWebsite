@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 
 const DEFAULT_SRC = 'https://images.unsplash.com/photo-1693250707557-a846a014b321?q=80&w=1400&auto=format&fit=crop';
 
@@ -361,7 +361,7 @@ const measureEdge = (context, image) => {
   return { matte, plain: clear < count * 0.5 && spread < 0.06 };
 };
 
-const HalftoneReveal = ({
+const HalftoneReveal = forwardRef(({
   src = DEFAULT_SRC,
   fit = 'cover',
   mode = 'mono',
@@ -384,12 +384,22 @@ const HalftoneReveal = ({
   wander = false,
   clickBurst = true,
   intro = true,
+  playIntro = true,
+  introDuration = 2.2,
   className = '',
   style
-}) => {
+}, ref) => {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const wakeRef = useRef(null);
+  const triggerIntroRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    startIntro: (force = false) => {
+      triggerIntroRef.current?.(force);
+    }
+  }));
+
   const settings = {
     fit,
     mode: MODES[mode] ?? 0,
@@ -411,7 +421,9 @@ const HalftoneReveal = ({
     reverse,
     wander,
     clickBurst,
-    intro
+    intro,
+    playIntro: Boolean(playIntro),
+    introDuration: Math.max(0.1, Number(introDuration) || 2.2)
   };
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -526,7 +538,9 @@ const HalftoneReveal = ({
       image: null,
       matte: [0, 0, 0],
       key: 0,
+      introStarted: false,
       introStart: 0,
+      shouldPlayIntro: Boolean(settingsRef.current.playIntro),
       presence: 0,
       drift: 0,
       trailUntil: 0
@@ -607,7 +621,14 @@ const HalftoneReveal = ({
     const drawView = (s, now) => {
       const [fx, fy, fw, fh] = frameRect(s);
       const image = state.image;
-      const intro = !image ? 0 : !s.intro || reduce ? 1 : Math.min(1, (now - state.introStart) / 1000 / INTRO_SECONDS);
+      const duration = s.introDuration || INTRO_SECONDS;
+      const intro = !image
+        ? 0
+        : !s.intro || reduce
+        ? 1
+        : !state.introStarted
+        ? 0
+        : Math.min(1, (now - state.introStart) / 1000 / duration);
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.useProgram(viewProgram);
       gl.activeTexture(gl.TEXTURE0);
@@ -697,7 +718,7 @@ const HalftoneReveal = ({
       const intro = drawView(s, now);
 
       const busy =
-        engaged || state.presence > 0.002 || bursts.length > 0 || now < state.trailUntil || (state.image && intro < 1);
+        engaged || state.presence > 0.002 || bursts.length > 0 || now < state.trailUntil || (state.image && state.introStarted && intro < 1);
       if (busy) raf = requestAnimationFrame(frame);
       else last = 0;
     };
@@ -705,6 +726,16 @@ const HalftoneReveal = ({
     const wake = () => {
       if (!raf && alive && visible && !document.hidden) raf = requestAnimationFrame(frame);
     };
+
+    const triggerIntro = (force = false) => {
+      state.shouldPlayIntro = true;
+      if (force || !state.introStarted) {
+        state.introStarted = true;
+        state.introStart = performance.now();
+        wake();
+      }
+    };
+    triggerIntroRef.current = triggerIntro;
 
     const image = new Image();
     image.crossOrigin = 'anonymous';
@@ -727,8 +758,11 @@ const HalftoneReveal = ({
         }
       }
       state.image = image;
-      state.introStart = performance.now();
-      wake();
+      if (state.shouldPlayIntro || settingsRef.current.playIntro) {
+        triggerIntro();
+      } else {
+        drawView(settingsRef.current, performance.now());
+      }
     };
     image.src = src;
 
@@ -790,6 +824,7 @@ const HalftoneReveal = ({
       alive = false;
       cancelAnimationFrame(raf);
       wakeRef.current = null;
+      triggerIntroRef.current = null;
       image.onload = null;
       resizeObserver.disconnect();
       intersection.disconnect();
@@ -809,6 +844,12 @@ const HalftoneReveal = ({
   }, [src]);
 
   useEffect(() => {
+    if (playIntro) {
+      triggerIntroRef.current?.();
+    }
+  }, [playIntro]);
+
+  useEffect(() => {
     wakeRef.current?.();
   });
 
@@ -821,6 +862,8 @@ const HalftoneReveal = ({
       <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" aria-hidden="true" />
     </div>
   );
-};
+});
+
+HalftoneReveal.displayName = 'HalftoneReveal';
 
 export default HalftoneReveal;

@@ -23,14 +23,15 @@
   will-change: transform;
 }
 
-/* Feather = the "blurry spread" that hangs ABOVE the About background and dissolves the hero.
+/* Feather = progressive blurred spread that hangs over the hero.
+   Overlaps .bg by 2px to guarantee no subpixel seam or gap on fractional DPI displays.
    NOTE: never put opacity / filter / mask on .root or .bg — that would make them a "backdrop root"
    and the backdrop-filter below would stop seeing the hero. */
 .feather {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 100%;
+  bottom: calc(100% - 2px);
   height: var(--feather, 35vh);
   pointer-events: none;
 }
@@ -41,15 +42,21 @@
   background: linear-gradient(
     to bottom,
     rgba(var(--about-rgb, 10, 10, 10), 0) 0%,
-    rgba(var(--about-rgb, 10, 10, 10), 0.16) 24%,
-    rgba(var(--about-rgb, 10, 10, 10), 0.48) 52%,
-    rgba(var(--about-rgb, 10, 10, 10), 0.82) 80%,
+    rgba(var(--about-rgb, 10, 10, 10), 0.02) 15%,
+    rgba(var(--about-rgb, 10, 10, 10), 0.08) 30%,
+    rgba(var(--about-rgb, 10, 10, 10), 0.22) 45%,
+    rgba(var(--about-rgb, 10, 10, 10), 0.45) 60%,
+    rgba(var(--about-rgb, 10, 10, 10), 0.72) 75%,
+    rgba(var(--about-rgb, 10, 10, 10), 0.90) 86%,
+    rgba(var(--about-rgb, 10, 10, 10), 0.98) 94%,
+    rgb(var(--about-rgb, 10, 10, 10)) 98%,
     rgb(var(--about-rgb, 10, 10, 10)) 100%
   );
+  z-index: 2;
 }
 
-/* Three stacked backdrop blurs, each masked to a different band = a progressive blur
-   (sharp at the top of the feather, very soft where it meets the About background). */
+/* Three stacked progressive backdrop blurs that smoothly dissolve the hero artwork
+   into the feather tint with no hard edge or cutoff. */
 .featherBlur {
   position: absolute;
   inset: 0;
@@ -57,10 +64,11 @@
   backdrop-filter: blur(var(--b));
   -webkit-mask-image: linear-gradient(to bottom, transparent var(--m0), #000 var(--m1));
   mask-image: linear-gradient(to bottom, transparent var(--m0), #000 var(--m1));
+  z-index: 1;
 }
-.fb1 { --b: 3px;  --m0: 0%;  --m1: 35%; }
-.fb2 { --b: 10px; --m0: 25%; --m1: 65%; }
-.fb3 { --b: 24px; --m0: 55%; --m1: 100%; }
+.fb1 { --b: 4px;  --m0: 0%;  --m1: 30%; }
+.fb2 { --b: 14px; --m0: 20%; --m1: 60%; }
+.fb3 { --b: 32px; --m0: 45%; --m1: 85%; }
 
 /* ── Portrait ──
    position:fixed + a scroll-scrubbed transform = the portrait is NOT part of the page flow, so its
@@ -120,15 +128,12 @@
 
 .headline {
   margin: 0 0 0 4.5vw;
-  max-width: 60.6vw;                /* reference: .about-text is 66.6% of (viewport - 2 x 4.5vw) */
-  /* From the reference's own CSS: line-height 1.45, letter-spacing -0.01em, colour #f0f0f0.
-     3.6vw (69px @1918) is what the measured 100px line pitch implies (100 / 1.45).
-     Family is set explicitly so a global h1-h6 rule can't override it. */
+  max-width: 43vw;
   font-family: var(--font-about-sans), "Public Sans", "Helvetica Neue", Arial, sans-serif;
-  font-weight: 480;
-  font-size: clamp(1.9rem, 3.6vw, 5.2rem);
-  line-height: 1.45;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  font-size: clamp(2.2rem, 3.6vw, 5.4rem);
+  line-height: 1.35;
+  letter-spacing: -0.015em;
   color: rgb(var(--about-fg, 240, 240, 240));
 }
 
@@ -143,10 +148,15 @@
 .serif {
   font-family: var(--font-about-serif), "Spectral", Georgia, serif;
   font-style: italic;
-  font-weight: 400;
+  font-weight: 600;
   font-size: 1.05em;
   line-height: 1;
   letter-spacing: -0.01em;
+  color: #d20c0c;
+}
+
+.break {
+  display: block;
 }
 
 .textBlock {
@@ -191,6 +201,7 @@
   .textBlock { margin: 11vh 0 0 6vw; width: 74vw; }
   .paragraph { font-size: 4.8vw; }
   .info { font-size: 3.6vw; margin-top: 8vw; }
+  .break { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
