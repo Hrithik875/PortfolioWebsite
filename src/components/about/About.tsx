@@ -55,73 +55,126 @@ export function About() {
         }
       );
 
-      // 2 ─ PORTRAIT TRAVEL. One source of motion: a scrubbed tween on a fixed layer.
-      //     Speed profile (px of portrait travel per px of scroll):
-      //       0 → entry     : (1 + coverSpeed)×  rides in together with the About cover
-      //       entry → +settle: eases down (smoothstep) to T.imageSpeed
-      //       after         : constant T.imageSpeed  (text moves at 1×, so the portrait is always slower)
-      //     The tween ends when the next section's top reaches the viewport top (it fully covers the
-      //     portrait by then), at which point the fixed layer is hidden.
-      const endScroll = () => rootTop() + rootEl.offsetHeight - (T.nextOverlapVh / 100) * vh();
-      const measure = () => {
-        const V = vh();
-        const v0 = 1 + T.coverSpeed, v1 = T.imageSpeed;
-        const s1 = (T.imageEntryVh / 100) * V;
-        const dl = Math.max(1, (T.imageSettleVh / 100) * V);
-        const dist = (s: number) => {
-          if (s <= s1) return v0 * s;
-          if (s <= s1 + dl) {
-            const x = (s - s1) / dl;                         // ∫ smoothstep = x³ − x⁴/2
-            return v0 * s1 + dl * (v0 * x - (v0 - v1) * (x ** 3 - (x ** 4) / 2));
-          }
-          return v0 * s1 + (dl * (v0 + v1)) / 2 + v1 * (s - s1 - dl);
+      const mm = gsap.matchMedia();
+
+      mm.add("(min-width: 1024px)", () => {
+        // 2 ─ PORTRAIT TRAVEL. One source of motion: a scrubbed tween on a fixed layer.
+        //     Speed profile (px of portrait travel per px of scroll):
+        //       0 → entry     : (1 + coverSpeed)×  rides in together with the About cover
+        //       entry → +settle: eases down (smoothstep) to T.imageSpeed
+        //       after         : constant T.imageSpeed  (text moves at 1×, so the portrait is always slower)
+        //     The tween ends when the next section's top reaches the viewport top (it fully covers the
+        //     portrait by then), at which point the fixed layer is hidden.
+        const endScroll = () => rootTop() + rootEl.offsetHeight - (T.nextOverlapVh / 100) * vh();
+        const measure = () => {
+          const V = vh();
+          const v0 = 1 + T.coverSpeed, v1 = T.imageSpeed;
+          const s1 = (T.imageEntryVh / 100) * V;
+          const dl = Math.max(1, (T.imageSettleVh / 100) * V);
+          const dist = (s: number) => {
+            if (s <= s1) return v0 * s;
+            if (s <= s1 + dl) {
+              const x = (s - s1) / dl;                         // ∫ smoothstep = x³ − x⁴/2
+              return v0 * s1 + dl * (v0 * x - (v0 - v1) * (x ** 3 - (x ** 4) / 2));
+            }
+            return v0 * s1 + (dl * (v0 + v1)) / 2 + v1 * (s - s1 - dl);
+          };
+          const y0 = V + featherPx();                          // starts exactly where the bg starts
+          const S = Math.max(endScroll(), s1 + dl + 1);
+          return { y0, S, Y: dist(S), dist };
         };
-        const y0 = V + featherPx();                          // starts exactly where the bg starts
-        const S = Math.max(endScroll(), s1 + dl + 1);
-        return { y0, S, Y: dist(S), dist };
-      };
-      let geo = measure();
-      const onRefreshInit = () => { geo = measure(); };
-      ScrollTrigger.addEventListener("refreshInit", onRefreshInit);
-      const travelEase = (u: number) => geo.dist(u * geo.S) / geo.Y;
-      const railEl = rail.current!;
-      const syncRail = (self: ScrollTrigger) => { railEl.style.visibility = self.progress >= 1 ? "hidden" : "visible"; };
-      gsap.fromTo(
-        wrapEl,
-        { y: () => geo.y0 },
-        {
-          y: () => geo.y0 - geo.Y,
-          ease: travelEase,
-          scrollTrigger: {
-            start: 0, end: () => geo.S, scrub: T.imageScrub, invalidateOnRefresh: true,
-            onUpdate: syncRail, onRefresh: syncRail,
-          },
-        }
-      );
+        let geo = measure();
+        const onRefreshInit = () => { geo = measure(); };
+        ScrollTrigger.addEventListener("refreshInit", onRefreshInit);
+        const travelEase = (u: number) => geo.dist(u * geo.S) / geo.Y;
+        const railEl = rail.current!;
+        const syncRail = (self: ScrollTrigger) => { railEl.style.visibility = self.progress >= 1 ? "hidden" : "visible"; };
+        gsap.fromTo(
+          wrapEl,
+          { y: () => geo.y0 },
+          {
+            y: () => geo.y0 - geo.Y,
+            ease: travelEase,
+            scrollTrigger: {
+              start: 0, end: () => geo.S, scrub: T.imageScrub, invalidateOnRefresh: true,
+              onUpdate: syncRail, onRefresh: syncRail,
+            },
+          }
+        );
 
-      // 3 ─ PORTRAIT REVEAL: the whole shape (edges too) starts heavily blurred + covered by the page
-      //     colour → sharp + clear.
-      //     Blur clears late (power3.in): soft while the headline reads, clean as the paragraph lands.
-      const blurMax = () => gsap.utils.clamp(18, 64, (T.imageBlur * window.innerWidth) / 1920);
-      const rv = { b: blurMax(), v: T.imageVeilFrom };
-      const paint = () => {
-        clip.style.filter = blur(+rv.b.toFixed(2));
-        veil.style.opacity = rv.v.toFixed(3);
-      };
-      paint();
-      gsap
-        .timeline({ scrollTrigger: { start: () => 0.05 * vh(), end: () => 1.75 * vh(), scrub: T.scrub, invalidateOnRefresh: true } })
-        .to(rv, { b: 0, ease: "power3.in", duration: 1, onUpdate: paint }, 0)
-        .to(rv, { v: 0, ease: "none", duration: 1, onUpdate: paint }, 0);
+        // 3 ─ PORTRAIT REVEAL: the whole shape (edges too) starts heavily blurred + covered by the page
+        //     colour → sharp + clear.
+        //     Blur clears late (power3.in): soft while the headline reads, clean as the paragraph lands.
+        const blurMax = () => gsap.utils.clamp(18, 64, (T.imageBlur * window.innerWidth) / 1920);
+        const rv = { b: blurMax(), v: T.imageVeilFrom };
+        const paint = () => {
+          clip.style.filter = blur(+rv.b.toFixed(2));
+          veil.style.opacity = rv.v.toFixed(3);
+        };
+        paint();
+        gsap
+          .timeline({ scrollTrigger: { start: () => 0.05 * vh(), end: () => 1.75 * vh(), scrub: T.scrub, invalidateOnRefresh: true } })
+          .to(rv, { b: 0, ease: "power3.in", duration: 1, onUpdate: paint }, 0)
+          .to(rv, { v: 0, ease: "none", duration: 1, onUpdate: paint }, 0);
 
-      // 4 ─ HEADLINE: per-line blur + opacity reveal. Text is in normal page flow, so these
-      //     screen-position triggers are exact. Lines are re-measured on font load and resize.
+        return () => {
+          ScrollTrigger.removeEventListener("refreshInit", onRefreshInit);
+          railEl.style.visibility = "";
+        };
+      });
+
+      mm.add("(max-width: 1023px)", () => {
+        const stage = rail.current!;        // in-flow container, never transformed -> stable trigger
+        const vh = () => window.innerHeight;
+
+        // scroll distance until the lagging portrait has left the top of the screen
+        const lagDist = () => (0.7 * vh() + wrapEl.offsetHeight) / T.mImageSpeed;
+        const lagST = () => ({
+          trigger: stage, start: "top 70%", end: () => `+=${lagDist()}`,
+          scrub: T.scrub, invalidateOnRefresh: true,
+        });
+
+        // A) parallax lag: portrait drifts at T.mImageSpeed x page speed
+        gsap.fromTo(wrapEl, { y: 0 },
+          { y: () => (1 - T.mImageSpeed) * lagDist(), ease: "none", scrollTrigger: lagST() });
+
+        // B) blur + page-colour veil clear as the portrait nears the top
+        const rv = { b: T.mImageBlur, v: T.imageVeilFrom };
+        const paint = () => {
+          clip.style.filter = blur(+rv.b.toFixed(2));
+          veil.style.opacity = rv.v.toFixed(3);
+        };
+        paint();
+        gsap.timeline({ scrollTrigger: {
+            trigger: stage, start: "top 98%", end: () => `+=${1.16 * vh()}`,
+            scrub: T.scrub, invalidateOnRefresh: true } })
+          .to(rv, { b: 0, ease: "power2.in", duration: 1, onUpdate: paint }, 0)
+          .to(rv, { v: 0, ease: "none", duration: 1, onUpdate: paint }, 0);
+
+        return () => { clip.style.filter = ""; veil.style.opacity = ""; };
+      });
+
+      // 4 ─ HEADLINE: per-line blur + opacity reveal.
+      //     Desktop: starts later (top 60%) so line 1 becomes fully clear close to the middle of the viewport (~50%).
+      //     Mobile: keeps original responsive timing (top 85%).
+      const isMobile = () => window.innerWidth <= 1023;
       const wordEls = gsap.utils.toArray<HTMLElement>(head.querySelectorAll("[data-word]"));
       let headTl: gsap.core.Timeline | null = null;
+      let blockTween: gsap.core.Tween | null = null;
+
       const buildHeadline = () => {
         headTl?.scrollTrigger?.kill(true);
         headTl?.kill();
-        const tl = gsap.timeline({ scrollTrigger: { trigger: head, start: "top 85%", end: "top 30%", scrub: T.scrub } });
+        const mobile = isMobile();
+        const tl = gsap.timeline({
+          scrollTrigger: {
+            trigger: head,
+            start: mobile ? "top 85%" : "top 60%",
+            end: mobile ? "top 30%" : "top 18%",
+            scrub: T.scrub,
+            invalidateOnRefresh: true,
+          },
+        });
         groupByLine(wordEls).forEach((line, i) => {
           tl.fromTo(
             line,
@@ -132,35 +185,70 @@ export function About() {
         });
         headTl = tl;
       };
-      buildHeadline();
+
+      // 5 ─ PARAGRAPH + INFO: one block, blur + opacity in
+      //     Mobile: reveals only after the last line of the first paragraph is completely clear.
+      //     Desktop: reveals with independent trigger in page flow.
+      const buildParagraph = () => {
+        blockTween?.scrollTrigger?.kill(true);
+        blockTween?.kill();
+        const mobile = isMobile();
+        if (mobile) {
+          blockTween = gsap.fromTo(
+            block,
+            { opacity: 0, filter: blur(T.paraBlur) },
+            {
+              opacity: 1, filter: blur(0), ease: "none",
+              scrollTrigger: {
+                start: () => (headTl?.scrollTrigger ? headTl.scrollTrigger.end - 5 : "top 60%"),
+                end: () => (headTl?.scrollTrigger ? headTl.scrollTrigger.end + 0.25 * vh() : "top 30%"),
+                scrub: T.scrub,
+                invalidateOnRefresh: true,
+              },
+            }
+          );
+        } else {
+          blockTween = gsap.fromTo(
+            block,
+            { opacity: 0, filter: blur(T.paraBlur) },
+            {
+              opacity: 1, filter: blur(0), ease: "none",
+              scrollTrigger: { trigger: block, start: "top 92%", end: "top 62%", scrub: T.scrub },
+            }
+          );
+        }
+      };
+
+      const buildAll = () => {
+        buildHeadline();
+        buildParagraph();
+      };
+      buildAll();
+
       let alive = true;
       document.fonts?.ready.then(() => {
         if (!alive) return;
-        buildHeadline();
+        buildAll();
         ScrollTrigger.refresh();
       });
       let lastW = head.offsetWidth;
       const ro = new ResizeObserver(() => {
-        if (Math.abs(head.offsetWidth - lastW) > 1) { lastW = head.offsetWidth; buildHeadline(); }
+        if (Math.abs(head.offsetWidth - lastW) > 1) {
+          lastW = head.offsetWidth;
+          buildAll();
+          ScrollTrigger.refresh();
+        }
       });
       ro.observe(head);
-
-      // 5 ─ PARAGRAPH + INFO: one block, blur + opacity in
-      gsap.fromTo(
-        block,
-        { opacity: 0, filter: blur(T.paraBlur) },
-        {
-          opacity: 1, filter: blur(0), ease: "none",
-          scrollTrigger: { trigger: block, start: "top 92%", end: "top 62%", scrub: T.scrub },
-        }
-      );
 
       return () => {
         alive = false;
         ro.disconnect();
-        ScrollTrigger.removeEventListener("refreshInit", onRefreshInit);
+        mm.revert();
         headTl?.scrollTrigger?.kill(true);
         headTl?.kill();
+        blockTween?.scrollTrigger?.kill(true);
+        blockTween?.kill();
       };
     },
     { scope: root }
@@ -184,16 +272,6 @@ export function About() {
         </div>
       </div>
 
-      {/* portrait (fixed layer, driven entirely by the travel tween) */}
-      <div ref={rail} className={s.imageFixed}>
-        <div ref={wrap} className={s.imageWrap}>
-          <div ref={clipRef} className={s.imageClip}>
-            <Image src={about.image.src} alt={about.image.alt} fill priority sizes="51vw" className={s.image} />
-            <div ref={veilRef} className={s.veil} />
-          </div>
-        </div>
-      </div>
-
       <div className={s.content}>
         <h2 ref={headline} className={s.headline} aria-label={plainHeadline}>
           {words.map((w, i) => (
@@ -212,6 +290,17 @@ export function About() {
         <div ref={textBlock} className={s.textBlock}>
           <p className={s.paragraph}>{about.paragraph}</p>
           <a href={about.info.href} className={s.info}>{about.info.label}</a>
+        </div>
+      </div>
+
+      {/* portrait */}
+      <div ref={rail} className={s.imageFixed}>
+        <div ref={wrap} className={s.imageWrap}>
+          <div ref={clipRef} className={s.imageClip}>
+            <Image src={about.image.src} alt={about.image.alt} fill priority
+                   sizes="(max-width: 1023px) 90vw, 51vw" className={s.image} />
+            <div ref={veilRef} className={s.veil} />
+          </div>
         </div>
       </div>
     </section>

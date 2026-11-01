@@ -193,22 +193,42 @@
 .info:hover { color: rgb(var(--about-fg, 240, 240, 240)); }
 
 @media (max-width: 1023px) {
-  .imageFixed { width: 72vw; }
-  .imageWrap { height: 90vh; }
-  .imageClip { border-radius: 20vw 0 0 20vw; }
-  .content { padding-top: 40vh; }
-  .headline { margin-left: 6vw; max-width: 88vw; font-size: 8vw; }
-  .textBlock { margin: 11vh 0 0 6vw; width: 74vw; }
-  .paragraph { font-size: 4.8vw; }
-  .info { font-size: 3.6vw; margin-top: 8vw; }
+  .root { height: auto; padding-bottom: 80vh; }   /* black gap before the next section */
+  .content { padding-top: 28vh; }
+
+  .headline {
+    margin: 0 0 0 5.5vw; max-width: 89vw;
+    font-size: 6.9vw; line-height: 1.38; font-weight: 450; letter-spacing: -0.02em;
+  }
+  .serif { font-weight: 400; }
   .break { display: none; }
+
+  .textBlock { margin: 11vw 0 0 5.5vw; width: 89vw; min-width: 0; }
+  .paragraph { font-size: 3.3vw; line-height: 1.6; font-weight: 480; letter-spacing: -0.005em; }
+  .info { font-size: 3.7vw; margin-top: 15vw; }
+
+  /* portrait: in the flow, under INFO */
+  .imageFixed {
+    position: relative; top: auto; right: auto;
+    width: 100%; height: auto;
+    margin-top: 3vw; padding: 0 5.5vw; box-sizing: border-box;
+    z-index: 1;
+  }
+  .imageWrap {
+    position: relative; top: auto; right: auto;
+    width: 100%; height: auto; aspect-ratio: 5 / 6;
+    transform: none;                 /* cancels the desktop "parked off-screen" transform */
+  }
+  .imageClip { right: 0; border-radius: 25vw 25vw 0 0; }   /* arch, square bottom */
+  .image { object-position: 50% 22%; }                      /* tune so the face is framed like the reference */
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* no scroll effects: static, fully revealed layout */
   .feather { display: none; }
-  .imageFixed { position: absolute; top: 0; height: 100%; }
-  .imageWrap { transform: none; top: 12vh; }
   .veil { opacity: 0 !important; }
   .imageClip { filter: none !important; }
+}
+@media (prefers-reduced-motion: reduce) and (min-width: 1024px) {
+  .imageFixed { position: absolute; top: 0; height: 100%; }
+  .imageWrap { transform: none; top: 12vh; }
 }
