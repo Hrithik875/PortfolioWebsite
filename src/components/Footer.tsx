@@ -112,7 +112,7 @@ export function Footer() {
             initial="hidden"
             whileInView="visible"
             viewport={{ once: false, amount: 0.1 }}
-            className="text-[14vw] font-bold tracking-[-0.01em] leading-[0.85] text-[color:var(--text-primary)] pointer-events-none select-none flex flex-nowrap whitespace-nowrap"
+            className="text-[14vw] font-bold tracking-[-0.01em] leading-[0.85] text-[#d20c0c] pointer-events-none select-none flex flex-nowrap whitespace-nowrap"
           >
             {brandName.split("").map((char, index) => (
               <span key={index} className="inline-block overflow-hidden">
