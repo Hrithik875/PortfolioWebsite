@@ -561,7 +561,6 @@ export function IntroReveal() {
           >
             <p>Scroll Down</p>
           </button>
-          <p>AI/ML Engineer</p>
         </footer>
       </div>
     </div>
