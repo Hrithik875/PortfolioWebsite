@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type CSSProperties,
+} from "react";
 import FlowingMenu, { type FlowingMenuItem } from "./FlowingMenu";
 
 export const SKILL_ITEMS: FlowingMenuItem[] = [
@@ -91,48 +97,213 @@ export const SKILL_ITEMS: FlowingMenuItem[] = [
   },
 ];
 
-export function SkillsSection() {
-  return (
-    <section id="skills" className="mb-16">
-      <div className="mb-8">
-        <span className="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--text-secondary)]">
-          Toolbox
-        </span>
-        <h2 className="text-2xl sm:text-3xl font-black text-[color:var(--text-primary)] mt-1">
-          Skills
-        </h2>
-      </div>
+const useIsoLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
 
+const EASE = "cubic-bezier(0.2, 0.9, 0.2, 1)";
+const RISE_DURATION = 850;
+
+const prefersReduced = () =>
+  typeof window !== "undefined" &&
+  (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
+
+// ─── Inline styles for typography matching About section ───────────────────
+const headlineStyle: CSSProperties = {
+  fontFamily: "var(--font-about-sans), 'Public Sans', 'Helvetica Neue', Arial, sans-serif",
+  fontWeight: 600,
+  fontSize: "clamp(2.2rem, 3.6vw, 5.4rem)",
+  lineHeight: 1.35,
+  letterSpacing: "-0.015em",
+  color: "rgb(var(--about-fg, 241, 241, 241))",
+  margin: 0,
+  textAlign: "left" as const,
+};
+
+const italicAccentStyle: CSSProperties = {
+  fontFamily: "var(--font-about-serif), 'Spectral', Georgia, serif",
+  fontStyle: "italic",
+  fontWeight: 600,
+  fontSize: "1.05em",
+  lineHeight: 1,
+  letterSpacing: "-0.01em",
+  color: "#d20c0c",
+};
+
+const paragraphStyle: CSSProperties = {
+  fontFamily: "var(--font-about-sans), 'Public Sans', 'Helvetica Neue', Arial, sans-serif",
+  fontWeight: 480,
+  fontSize: "clamp(1rem, 1.8vw, 2.4rem)",
+  lineHeight: 1.57,
+  letterSpacing: "-0.01em",
+  color: "rgb(var(--about-fg, 241, 241, 241))",
+  margin: 0,
+};
+
+export function SkillsSection() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const headingClipRef = useRef<HTMLDivElement>(null);
+  const headingInnerRef = useRef<HTMLHeadingElement>(null);
+  const paraClipRef = useRef<HTMLDivElement>(null);
+  const paraInnerRef = useRef<HTMLParagraphElement>(null);
+  const menuWrapRef = useRef<HTMLDivElement>(null);
+
+  useIsoLayoutEffect(() => {
+    const section = sectionRef.current;
+    const headingInner = headingInnerRef.current;
+    const paraInner = paraInnerRef.current;
+    const menuWrap = menuWrapRef.current;
+    if (!section || !headingInner || !paraInner || !menuWrap) return;
+
+    const reduced = prefersReduced();
+
+    if (reduced) {
+      // Show everything immediately with no animation
+      headingInner.style.transform = "translateY(0)";
+      headingInner.style.opacity = "1";
+      paraInner.style.transform = "translateY(0)";
+      paraInner.style.opacity = "1";
+      menuWrap.style.opacity = "1";
+      menuWrap.style.filter = "blur(0px)";
+      return;
+    }
+
+    // Pre-hide elements before viewport entry
+    headingInner.style.transform = "translateY(110%)";
+    headingInner.style.opacity = "0";
+    paraInner.style.transform = "translateY(110%)";
+    paraInner.style.opacity = "0";
+    menuWrap.style.opacity = "0";
+    menuWrap.style.filter = "blur(16px)";
+
+    let played = false;
+
+    const play = () => {
+      if (played) return;
+      played = true;
+
+      // 1. Heading rises up at t=0
+      headingInner.style.transition = `transform ${RISE_DURATION}ms ${EASE}, opacity ${RISE_DURATION}ms ${EASE}`;
+      headingInner.style.transform = "translateY(0)";
+      headingInner.style.opacity = "1";
+
+      // 2. Paragraph rises up at t=120ms
+      const tPara = window.setTimeout(() => {
+        paraInner.style.transition = `transform ${RISE_DURATION}ms ${EASE}, opacity ${RISE_DURATION}ms ${EASE}`;
+        paraInner.style.transform = "translateY(0)";
+        paraInner.style.opacity = "1";
+      }, 120);
+
+      // 3. FlowingMenu blurs in at t=400ms
+      const tMenu = window.setTimeout(() => {
+        menuWrap.style.transition = `opacity 700ms ease, filter 700ms ease`;
+        menuWrap.style.opacity = "1";
+        menuWrap.style.filter = "blur(0px)";
+      }, 400);
+
+      return () => {
+        window.clearTimeout(tPara);
+        window.clearTimeout(tMenu);
+      };
+    };
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          play();
+          obs.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    obs.observe(section);
+
+    return () => {
+      obs.disconnect();
+    };
+  }, []);
+
+  return (
+    <section
+      id="skills"
+      ref={sectionRef}
+      style={{ marginBottom: "4rem" }}
+    >
+      {/* ── Layout wrapper: flex-col on mobile, flex-row on desktop ── */}
       <div
-        className="rounded-[2rem] overflow-hidden border border-[color:var(--border)]"
-        style={{ height: "clamp(560px, 85vh, 820px)", position: "relative" }}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 0,
+        }}
+        className="skills-layout"
       >
-        <FlowingMenu
-          items={SKILL_ITEMS}
-          speed={60}
-          stretch={0.6}
-          magnet={0.25}
-          followCursor={0.4}
-          direction="left"
-          duration={0.5}
-          bandInset={0}
-          bandRadius={0}
-          carryContent={false}
-          dividers
-          dimInactive={false}
-          align="center"
-          showIndex={false}
-          showArrow={false}
-          imageShape="pill"
-          imageLayout="group"
-          intro
-          ariaLabel="Skills"
-          textColor="var(--text-primary)"
-          bgColor="var(--background)"
-          marqueeBgColor="var(--text-primary)"
-          marqueeTextColor="var(--background)"
-          borderColor="var(--border)"
-        />
+        {/* ── LEFT PANEL: 35% desktop, full width mobile ── */}
+        <div className="skills-left-panel">
+          {/* Heading with overflow-hidden clip */}
+          <div
+            ref={headingClipRef}
+            style={{ overflow: "hidden" }}
+          >
+            <h2
+              ref={headingInnerRef}
+              style={headlineStyle}
+              className="skills-heading"
+            >
+              My{" "}
+              <em style={italicAccentStyle}>Playground</em>
+            </h2>
+          </div>
+
+          {/* Paragraph with overflow-hidden clip */}
+          <div
+            ref={paraClipRef}
+            style={{ overflow: "hidden", marginTop: "clamp(0.75rem, 1.5vw, 1.5rem)" }}
+          >
+            <p
+              ref={paraInnerRef}
+              style={paragraphStyle}
+              className="skills-paragraph"
+            >
+              A collection of tools, technologies, and ideas I use to turn
+              problems into practical solutions and concepts into meaningful
+              experiences.
+            </p>
+          </div>
+        </div>
+
+        {/* ── RIGHT PANEL: 65% desktop, full width mobile ── */}
+        <div
+          ref={menuWrapRef}
+          className="skills-right-panel"
+          style={{ position: "relative" }}
+        >
+          <FlowingMenu
+            items={SKILL_ITEMS}
+            speed={60}
+            stretch={0.6}
+            magnet={0.25}
+            followCursor={0.4}
+            direction="left"
+            duration={0.5}
+            bandInset={0}
+            bandRadius={0}
+            carryContent={false}
+            dividers
+            dimInactive={false}
+            align="center"
+            showIndex={false}
+            showArrow={false}
+            imageShape="pill"
+            imageLayout="group"
+            intro
+            ariaLabel="Skills"
+            textColor="var(--text-primary)"
+            bgColor="var(--background)"
+            marqueeBgColor="var(--text-primary)"
+            marqueeTextColor="var(--background)"
+            borderColor="var(--border)"
+          />
+        </div>
       </div>
     </section>
   );
