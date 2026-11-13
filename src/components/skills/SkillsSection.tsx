@@ -108,15 +108,15 @@ const prefersReduced = () =>
   (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
 
 // ─── Inline styles for typography matching About section ───────────────────
+// Note: font-size, font-weight, letter-spacing, line-height, white-space are
+// driven by .skills-heading / .skills-paragraph CSS classes so that media queries
+// control responsive sizing without inline specificity conflicts.
 const headlineStyle: CSSProperties = {
   fontFamily: "var(--font-about-sans), 'Public Sans', 'Helvetica Neue', Arial, sans-serif",
-  fontWeight: 600,
-  fontSize: "clamp(2.2rem, 3.6vw, 5.4rem)",
-  lineHeight: 1.35,
-  letterSpacing: "-0.015em",
   color: "rgb(var(--about-fg, 241, 241, 241))",
   margin: 0,
   textAlign: "left" as const,
+  whiteSpace: "nowrap" as const,
 };
 
 const italicAccentStyle: CSSProperties = {
@@ -132,14 +132,11 @@ const italicAccentStyle: CSSProperties = {
 const paragraphStyle: CSSProperties = {
   fontFamily: "var(--font-about-sans), 'Public Sans', 'Helvetica Neue', Arial, sans-serif",
   fontWeight: 480,
-  fontSize: "clamp(1rem, 1.8vw, 2.4rem)",
-  lineHeight: 1.57,
-  letterSpacing: "-0.01em",
   color: "rgb(var(--about-fg, 241, 241, 241))",
   margin: 0,
 };
 
-export function SkillsSection() {
+export function SkillsSection({ className = "" }: { className?: string }) {
   const sectionRef = useRef<HTMLElement>(null);
   const headingClipRef = useRef<HTMLDivElement>(null);
   const headingInnerRef = useRef<HTMLHeadingElement>(null);
@@ -226,17 +223,10 @@ export function SkillsSection() {
     <section
       id="skills"
       ref={sectionRef}
-      style={{ marginBottom: "4rem" }}
+      className={`skills-section ${className}`}
     >
-      {/* ── Layout wrapper: flex-col on mobile, flex-row on desktop ── */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 0,
-        }}
-        className="skills-layout"
-      >
+      {/* ── Layout wrapper: purely CSS-driven flex — NO inline flex overrides ── */}
+      <div className="skills-layout">
         {/* ── LEFT PANEL: 35% desktop, full width mobile ── */}
         <div className="skills-left-panel">
           {/* Heading with overflow-hidden clip */}
@@ -257,7 +247,8 @@ export function SkillsSection() {
           {/* Paragraph with overflow-hidden clip */}
           <div
             ref={paraClipRef}
-            style={{ overflow: "hidden", marginTop: "clamp(0.75rem, 1.5vw, 1.5rem)" }}
+            style={{ overflow: "hidden" }}
+            className="skills-para-clip"
           >
             <p
               ref={paraInnerRef}

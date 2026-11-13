@@ -84,7 +84,7 @@ export default function HomePage() {
           paddingTop: "15vh",
         }}
       >
-                <div className="w-full max-w-6xl mx-auto px-6 pb-20 z-20">
+        <div className="w-full pb-20 z-20">
           <SkillsSection />
         </div>
 

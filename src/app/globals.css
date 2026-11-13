@@ -280,10 +280,24 @@ html.intro-loading .hero-rise-delay {
 
 /* ── Skills Section: 35/65 Layout ──────────────────────────────────────── */
 
-/* Mobile-first: stacked column */
+/*
+ * Section container: matches the exact left/right distance from viewport edges
+ * as the About section above it (5.5vw on mobile, 4.5vw on desktop).
+ */
+.skills-section {
+  width: 100%;
+  padding-left: 5.5vw;
+  padding-right: 5.5vw;
+  box-sizing: border-box;
+  margin-bottom: 5rem;
+}
+
+/* Mobile-first: stacked column layout (header -> paragraph -> menu) */
 .skills-layout {
-  flex-direction: column;
-  gap: 2rem;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0;
+  width: 100%;
 }
 
 .skills-left-panel {
@@ -293,57 +307,96 @@ html.intro-loading .hero-rise-delay {
   justify-content: center;
 }
 
+/* Mobile: "My Playground" guaranteed on ONE line */
+.skills-heading {
+  font-size: clamp(1.75rem, 6.8vw, 2.5rem) !important;
+  font-weight: 450 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.25 !important;
+  white-space: nowrap !important;
+}
+
+/* Mobile paragraph spacing */
+.skills-para-clip {
+  margin-top: clamp(0.85rem, 3.5vw, 1.4rem);
+}
+
+.skills-paragraph {
+  font-size: clamp(0.92rem, 3.4vw, 1.15rem) !important;
+  line-height: 1.6 !important;
+  font-weight: 480 !important;
+}
+
+/* Mobile: generous gap between paragraph and FlowingMenu card */
 .skills-right-panel {
   width: 100%;
-  height: clamp(480px, 75vw, 680px);
+  margin-top: clamp(2.5rem, 8vw, 4rem);
+  height: clamp(480px, 75vh, 620px);
   border-radius: 2rem;
   overflow: hidden;
   border: 1px solid var(--border);
 }
 
-/* Mobile heading/paragraph font overrides */
-.skills-heading {
-  font-size: 6.9vw !important;
-  font-weight: 450 !important;
-  letter-spacing: -0.02em !important;
-}
+/* ── Desktop (≥1024px): 35/65 split, side-by-side ── */
+@media (min-width: 1024px) {
+  .skills-section {
+    padding-left: 4.5vw;
+    padding-right: 4.5vw;
+  }
 
-.skills-paragraph {
-  font-size: 3.3vw !important;
-  line-height: 1.6 !important;
-}
-
-/* Desktop (≥768px): 35/65 split, side-by-side */
-@media (min-width: 768px) {
   .skills-layout {
-    flex-direction: row;
-    align-items: stretch;
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: space-between;
     gap: 0;
   }
 
   .skills-left-panel {
     width: 35%;
-    padding-right: clamp(1.5rem, 3vw, 3rem);
     flex-shrink: 0;
+    padding-right: clamp(2rem, 3.5vw, 4.5rem);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: left;
+  }
+
+  .skills-para-clip {
+    margin-top: clamp(1.2rem, 2vw, 2rem);
   }
 
   .skills-right-panel {
     width: 65%;
     flex-shrink: 0;
+    margin-top: 0;        /* reset mobile top-margin */
     height: clamp(560px, 85vh, 820px);
   }
 
-  /* Restore desktop About-matching font sizes */
+  /*
+   * Desktop heading: guaranteed ONE line ("My Playground")
+   * Matches About headline typography: font-about-sans, weight 600
+   */
   .skills-heading {
-    font-size: clamp(2.2rem, 3.6vw, 5.4rem) !important;
+    font-size: clamp(2rem, 3.1vw, 3.8rem) !important;
     font-weight: 600 !important;
     letter-spacing: -0.015em !important;
+    line-height: 1.35 !important;
+    white-space: nowrap !important;
   }
 
+  /* Matches About paragraph typography: font-about-sans, weight 480 */
   .skills-paragraph {
-    font-size: clamp(1rem, 1.8vw, 2.4rem) !important;
+    font-size: clamp(0.95rem, 1.35vw, 1.55rem) !important;
     line-height: 1.57 !important;
+    font-weight: 480 !important;
+    white-space: normal;
   }
+}
+
+/* If inside a constrained container (like /about page's max-w-5xl) */
+.max-w-5xl .skills-section {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 
