@@ -53,6 +53,8 @@ export interface FlowingMenuProps {
    */
   imageLayout?: 'group' | 'interleave';
   intro?: boolean;
+  /** When provided, intro animation is controlled by parent instead of internal viewport observer. */
+  triggerIntro?: boolean;
   activeIndex?: number;
   onItemClick?: (item: FlowingMenuItem, index: number, event: ReactMouseEvent<HTMLElement>) => void;
   ariaLabel?: string;
@@ -118,6 +120,7 @@ function FlowingMenu({
   imageShape = 'pill',
   imageLayout = 'group',
   intro = true,
+  triggerIntro,
   activeIndex,
   onItemClick,
   ariaLabel = 'Menu',
@@ -510,16 +513,18 @@ function FlowingMenu({
     const fades = root.querySelectorAll<HTMLElement>('[data-intro-fade]');
     const rules = root.querySelectorAll<HTMLElement>('[data-intro-rule]');
 
-    lines.forEach(node => {
-      node.style.transform = 'translateY(110%)';
-    });
-    fades.forEach(node => {
-      node.style.opacity = '0';
-    });
-    rules.forEach(node => {
-      node.style.transform = 'scaleX(0)';
-      node.style.transformOrigin = 'left';
-    });
+    if (!introPlayedRef.current) {
+      lines.forEach(node => {
+        node.style.transform = 'translateY(110%)';
+      });
+      fades.forEach(node => {
+        node.style.opacity = '0';
+      });
+      rules.forEach(node => {
+        node.style.transform = 'scaleX(0)';
+        node.style.transformOrigin = 'left';
+      });
+    }
 
     const playIntro = () => {
       if (introPlayedRef.current) return;
@@ -598,6 +603,17 @@ function FlowingMenu({
       );
     };
 
+    if (typeof triggerIntro !== 'undefined') {
+      if (triggerIntro) {
+        playIntro();
+      }
+      return () => {
+        const loop = engine.current;
+        loop.timers.forEach(clearTimeout);
+        loop.timers = [];
+      };
+    }
+
     if (typeof IntersectionObserver === 'undefined') {
       playIntro();
       return undefined;
@@ -612,7 +628,8 @@ function FlowingMenu({
         }
       },
       {
-        threshold: 0.15
+        rootMargin: '0px 0px -60% 0px',
+        threshold: 0
       }
     );
 
@@ -624,7 +641,7 @@ function FlowingMenu({
       loop.timers.forEach(clearTimeout);
       loop.timers = [];
     };
-  }, []);
+  }, [intro, triggerIntro]);
 
   useEffect(() => {
     const loop = engine.current;

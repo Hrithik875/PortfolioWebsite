@@ -307,12 +307,12 @@ html.intro-loading .hero-rise-delay {
   justify-content: center;
 }
 
-/* Mobile: "My Playground" guaranteed on ONE line */
+/* Mobile: exact match to About headline on mobile */
 .skills-heading {
-  font-size: clamp(1.75rem, 6.8vw, 2.5rem) !important;
+  font-size: 6.9vw !important;
   font-weight: 450 !important;
   letter-spacing: -0.02em !important;
-  line-height: 1.25 !important;
+  line-height: 1.38 !important;
   white-space: nowrap !important;
 }
 
@@ -373,11 +373,11 @@ html.intro-loading .hero-rise-delay {
   }
 
   /*
-   * Desktop heading: guaranteed ONE line ("My Playground")
-   * Matches About headline typography: font-about-sans, weight 600
+   * Desktop heading: exact match to About headline ("Thoughtful by design...")
+   * font-about-sans, weight 600, clamp(2.2rem, 3.6vw, 5.4rem), line-height 1.35
    */
   .skills-heading {
-    font-size: clamp(2rem, 3.1vw, 3.8rem) !important;
+    font-size: clamp(2.2rem, 3.6vw, 5.4rem) !important;
     font-weight: 600 !important;
     letter-spacing: -0.015em !important;
     line-height: 1.35 !important;

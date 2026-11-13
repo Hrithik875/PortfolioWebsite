@@ -4,6 +4,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type CSSProperties,
 } from "react";
 import FlowingMenu, { type FlowingMenuItem } from "./FlowingMenu";
@@ -143,6 +144,7 @@ export function SkillsSection({ className = "" }: { className?: string }) {
   const paraClipRef = useRef<HTMLDivElement>(null);
   const paraInnerRef = useRef<HTMLParagraphElement>(null);
   const menuWrapRef = useRef<HTMLDivElement>(null);
+  const [triggerMenuIntro, setTriggerMenuIntro] = useState(false);
 
   useIsoLayoutEffect(() => {
     const section = sectionRef.current;
@@ -161,6 +163,7 @@ export function SkillsSection({ className = "" }: { className?: string }) {
       paraInner.style.opacity = "1";
       menuWrap.style.opacity = "1";
       menuWrap.style.filter = "blur(0px)";
+      setTriggerMenuIntro(true);
       return;
     }
 
@@ -197,12 +200,19 @@ export function SkillsSection({ className = "" }: { className?: string }) {
         menuWrap.style.filter = "blur(0px)";
       }, 400);
 
+      // 4. FlowingMenu's category headers animate and band sweeps at t=500ms
+      const tIntro = window.setTimeout(() => {
+        setTriggerMenuIntro(true);
+      }, 500);
+
       return () => {
         window.clearTimeout(tPara);
         window.clearTimeout(tMenu);
+        window.clearTimeout(tIntro);
       };
     };
 
+    // Trigger only when scrolled past halfway vertically (60% from the bottom of the viewport)
     const obs = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
@@ -210,7 +220,10 @@ export function SkillsSection({ className = "" }: { className?: string }) {
           obs.disconnect();
         }
       },
-      { threshold: 0.1 }
+      {
+        rootMargin: "0px 0px -60% 0px",
+        threshold: 0,
+      }
     );
     obs.observe(section);
 
@@ -287,6 +300,7 @@ export function SkillsSection({ className = "" }: { className?: string }) {
             imageShape="pill"
             imageLayout="group"
             intro
+            triggerIntro={triggerMenuIntro}
             ariaLabel="Skills"
             textColor="var(--text-primary)"
             bgColor="var(--background)"
