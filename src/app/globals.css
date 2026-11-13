@@ -278,5 +278,73 @@ html.intro-loading .hero-rise-delay {
   filter: invert(1);
 }
 
+/* ── Skills Section: 35/65 Layout ──────────────────────────────────────── */
+
+/* Mobile-first: stacked column */
+.skills-layout {
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.skills-left-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.skills-right-panel {
+  width: 100%;
+  height: clamp(480px, 75vw, 680px);
+  border-radius: 2rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+/* Mobile heading/paragraph font overrides */
+.skills-heading {
+  font-size: 6.9vw !important;
+  font-weight: 450 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.skills-paragraph {
+  font-size: 3.3vw !important;
+  line-height: 1.6 !important;
+}
+
+/* Desktop (≥768px): 35/65 split, side-by-side */
+@media (min-width: 768px) {
+  .skills-layout {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .skills-left-panel {
+    width: 35%;
+    padding-right: clamp(1.5rem, 3vw, 3rem);
+    flex-shrink: 0;
+  }
+
+  .skills-right-panel {
+    width: 65%;
+    flex-shrink: 0;
+    height: clamp(560px, 85vh, 820px);
+  }
+
+  /* Restore desktop About-matching font sizes */
+  .skills-heading {
+    font-size: clamp(2.2rem, 3.6vw, 5.4rem) !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.015em !important;
+  }
+
+  .skills-paragraph {
+    font-size: clamp(1rem, 1.8vw, 2.4rem) !important;
+    line-height: 1.57 !important;
+  }
+}
+
 
 
