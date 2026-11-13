@@ -101,8 +101,8 @@ export const SKILL_ITEMS: FlowingMenuItem[] = [
 const useIsoLayoutEffect =
   typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-const EASE = "cubic-bezier(0.2, 0.9, 0.2, 1)";
-const RISE_DURATION = 850;
+const EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
+const RISE_DURATION = 1350;
 
 const prefersReduced = () =>
   typeof window !== "undefined" &&
@@ -147,11 +147,10 @@ export function SkillsSection({ className = "" }: { className?: string }) {
   const [triggerMenuIntro, setTriggerMenuIntro] = useState(false);
 
   useIsoLayoutEffect(() => {
-    const section = sectionRef.current;
     const headingInner = headingInnerRef.current;
     const paraInner = paraInnerRef.current;
     const menuWrap = menuWrapRef.current;
-    if (!section || !headingInner || !paraInner || !menuWrap) return;
+    if (!headingInner || !paraInner || !menuWrap) return;
 
     const reduced = prefersReduced();
 
@@ -176,59 +175,130 @@ export function SkillsSection({ className = "" }: { className?: string }) {
     menuWrap.style.filter = "blur(16px)";
 
     let played = false;
+    let timers: number[] = [];
+
+    const clearAllTimers = () => {
+      timers.forEach(window.clearTimeout);
+      timers = [];
+    };
+
+    const reset = () => {
+      if (!played) return;
+      played = false;
+      clearAllTimers();
+      setTriggerMenuIntro(false);
+
+      headingInner.style.transition = "none";
+      headingInner.style.transform = "translateY(110%)";
+      headingInner.style.opacity = "0";
+
+      paraInner.style.transition = "none";
+      paraInner.style.transform = "translateY(110%)";
+      paraInner.style.opacity = "0";
+
+      menuWrap.style.transition = "none";
+      menuWrap.style.opacity = "0";
+      menuWrap.style.filter = "blur(16px)";
+    };
 
     const play = () => {
       if (played) return;
       played = true;
+      clearAllTimers();
+
+      // Ensure elements start from pre-hidden state
+      headingInner.style.transition = "none";
+      headingInner.style.transform = "translateY(110%)";
+      headingInner.style.opacity = "0";
+      paraInner.style.transition = "none";
+      paraInner.style.transform = "translateY(110%)";
+      paraInner.style.opacity = "0";
+      menuWrap.style.transition = "none";
+      menuWrap.style.opacity = "0";
+      menuWrap.style.filter = "blur(16px)";
+
+      // Force reflow
+      void headingInner.offsetHeight;
 
       // 1. Heading rises up at t=0
       headingInner.style.transition = `transform ${RISE_DURATION}ms ${EASE}, opacity ${RISE_DURATION}ms ${EASE}`;
       headingInner.style.transform = "translateY(0)";
       headingInner.style.opacity = "1";
 
-      // 2. Paragraph rises up at t=120ms
-      const tPara = window.setTimeout(() => {
-        paraInner.style.transition = `transform ${RISE_DURATION}ms ${EASE}, opacity ${RISE_DURATION}ms ${EASE}`;
-        paraInner.style.transform = "translateY(0)";
-        paraInner.style.opacity = "1";
-      }, 120);
+      // 2. Paragraph rises up at t=150ms
+      timers.push(
+        window.setTimeout(() => {
+          paraInner.style.transition = `transform ${RISE_DURATION}ms ${EASE}, opacity ${RISE_DURATION}ms ${EASE}`;
+          paraInner.style.transform = "translateY(0)";
+          paraInner.style.opacity = "1";
+        }, 150)
+      );
 
-      // 3. FlowingMenu blurs in at t=400ms
-      const tMenu = window.setTimeout(() => {
-        menuWrap.style.transition = `opacity 700ms ease, filter 700ms ease`;
-        menuWrap.style.opacity = "1";
-        menuWrap.style.filter = "blur(0px)";
-      }, 400);
+      // 3. FlowingMenu blurs in at t=450ms
+      timers.push(
+        window.setTimeout(() => {
+          menuWrap.style.transition = `opacity 900ms ease, filter 900ms ease`;
+          menuWrap.style.opacity = "1";
+          menuWrap.style.filter = "blur(0px)";
+        }, 450)
+      );
 
-      // 4. FlowingMenu's category headers animate and band sweeps at t=500ms
-      const tIntro = window.setTimeout(() => {
-        setTriggerMenuIntro(true);
-      }, 500);
-
-      return () => {
-        window.clearTimeout(tPara);
-        window.clearTimeout(tMenu);
-        window.clearTimeout(tIntro);
-      };
+      // 4. FlowingMenu's category headers animate and band sweeps at t=650ms
+      timers.push(
+        window.setTimeout(() => {
+          setTriggerMenuIntro(true);
+        }, 650)
+      );
     };
 
-    // Trigger only when scrolled past halfway vertically (60% from the bottom of the viewport)
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          play();
-          obs.disconnect();
+    let rafId = 0;
+    const check = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        if (!headingClipRef.current) return;
+        const rect = headingClipRef.current.getBoundingClientRect();
+        const vh = window.innerHeight;
+        const isMobile = window.innerWidth < 1024;
+
+        // Trigger threshold: 65% from bottom on desktop (y = 0.35 * vh), 58% from bottom on mobile (y = 0.42 * vh)
+        const triggerY = isMobile ? vh * 0.42 : vh * 0.35;
+        // Reset threshold: when element scrolls back down to bottom 25% (or off-screen)
+        const resetY = vh * 0.75;
+
+        if (rect.top <= triggerY && rect.bottom >= 0) {
+          if (!played) {
+            play();
+          }
+        } else if (rect.top > resetY) {
+          if (played) {
+            reset();
+          }
         }
-      },
-      {
-        rootMargin: "0px 0px -60% 0px",
-        threshold: 0,
-      }
-    );
-    obs.observe(section);
+      });
+    };
+
+    // Initial check on mount
+    check();
+
+    // Listen to native scroll & resize
+    window.addEventListener("scroll", check, { passive: true });
+    window.addEventListener("resize", check, { passive: true });
+
+    // Also listen to Lenis smooth scroll if present
+    const win = window as unknown as {
+      __lenis?: {
+        on: (event: string, cb: () => void) => void;
+        off: (event: string, cb: () => void) => void;
+      };
+    };
+    win.__lenis?.on("scroll", check);
 
     return () => {
-      obs.disconnect();
+      cancelAnimationFrame(rafId);
+      clearAllTimers();
+      window.removeEventListener("scroll", check);
+      window.removeEventListener("resize", check);
+      win.__lenis?.off("scroll", check);
     };
   }, []);
 

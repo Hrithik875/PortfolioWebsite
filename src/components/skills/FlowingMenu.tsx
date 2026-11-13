@@ -536,8 +536,8 @@ function FlowingMenu({
         const anim = node.animate(
           [{ transform: 'translateY(110%)' }, { transform: 'translateY(0)' }],
           {
-            duration: 850,
-            delay: index * 75,
+            duration: 1250,
+            delay: index * 80,
             easing: EASE,
             fill: 'forwards'
           }
@@ -551,7 +551,7 @@ function FlowingMenu({
         const anim = node.animate(
           [{ opacity: 0 }, { opacity: 1 }],
           {
-            duration: 700,
+            duration: 900,
             delay: 200 + index * 40,
             easing: 'ease',
             fill: 'forwards'
@@ -566,7 +566,7 @@ function FlowingMenu({
         const anim = node.animate(
           [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }],
           {
-            duration: 900,
+            duration: 1250,
             delay: index * 60,
             easing: EASE,
             fill: 'forwards'
@@ -579,7 +579,7 @@ function FlowingMenu({
 
       const loop = engine.current;
       const count = rows.current.filter(Boolean).length;
-      const start = 700 + count * 50;
+      const start = 950 + count * 55;
       const step = 260;
 
       for (let index = 0; index < count; index++) {
@@ -606,6 +606,30 @@ function FlowingMenu({
     if (typeof triggerIntro !== 'undefined') {
       if (triggerIntro) {
         playIntro();
+      } else {
+        introPlayedRef.current = false;
+        const loop = engine.current;
+        loop.timers.forEach(clearTimeout);
+        loop.timers = [];
+        lines.forEach(node => {
+          node.style.transform = 'translateY(110%)';
+        });
+        fades.forEach(node => {
+          node.style.opacity = '0';
+        });
+        rules.forEach(node => {
+          node.style.transform = 'scaleX(0)';
+          node.style.transformOrigin = 'left';
+        });
+        const b = band.current;
+        b.shown = false;
+        b.index = -1;
+        rows.current.forEach(r => {
+          if (r?.band) {
+            r.band.style.clipPath = 'inset(50% 0 50% 0)';
+            r.band.style.visibility = 'hidden';
+          }
+        });
       }
       return () => {
         const loop = engine.current;
