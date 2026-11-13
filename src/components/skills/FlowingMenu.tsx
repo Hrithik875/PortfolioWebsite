@@ -83,7 +83,7 @@ interface Metric {
 const DIRECTIONS = ['left', 'right', 'alternate'];
 const SHAPES = ['pill', 'rounded', 'circle'];
 const LAYOUTS = ['group', 'interleave'];
-const EASE = 'cubic-bezier(0.2, 0.9, 0.2, 1)';
+const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -513,14 +513,22 @@ function FlowingMenu({
     const fades = root.querySelectorAll<HTMLElement>('[data-intro-fade]');
     const rules = root.querySelectorAll<HTMLElement>('[data-intro-rule]');
 
-    if (!introPlayedRef.current) {
+    lines.forEach(node => {
+      node.style.willChange = 'transform, opacity';
+    });
+
+    if (!introPlayedRef.current && !triggerIntro) {
       lines.forEach(node => {
+        node.style.transition = 'none';
         node.style.transform = 'translateY(110%)';
+        node.style.opacity = '0';
       });
       fades.forEach(node => {
+        node.style.transition = 'none';
         node.style.opacity = '0';
       });
       rules.forEach(node => {
+        node.style.transition = 'none';
         node.style.transform = 'scaleX(0)';
         node.style.transformOrigin = 'left';
       });
@@ -532,54 +540,28 @@ function FlowingMenu({
 
       measureRef.current();
 
+      // Animate lines up with smooth staggered CSS transitions
       lines.forEach((node, index) => {
-        const anim = node.animate(
-          [{ transform: 'translateY(110%)' }, { transform: 'translateY(0)' }],
-          {
-            duration: 1250,
-            delay: index * 80,
-            easing: EASE,
-            fill: 'forwards'
-          }
-        );
-        anim.onfinish = () => {
-          node.style.transform = 'none';
-        };
+        node.style.transition = `transform 950ms ${EASE} ${index * 60}ms, opacity 950ms ease ${index * 60}ms`;
+        node.style.transform = 'translateY(0)';
+        node.style.opacity = '1';
       });
 
       fades.forEach((node, index) => {
-        const anim = node.animate(
-          [{ opacity: 0 }, { opacity: 1 }],
-          {
-            duration: 900,
-            delay: 200 + index * 40,
-            easing: 'ease',
-            fill: 'forwards'
-          }
-        );
-        anim.onfinish = () => {
-          node.style.opacity = '1';
-        };
+        node.style.transition = `opacity 800ms ease ${150 + index * 40}ms`;
+        node.style.opacity = '1';
       });
 
       rules.forEach((node, index) => {
-        const anim = node.animate(
-          [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }],
-          {
-            duration: 1250,
-            delay: index * 60,
-            easing: EASE,
-            fill: 'forwards'
-          }
-        );
-        anim.onfinish = () => {
-          node.style.transform = 'none';
-        };
+        node.style.transition = `transform 950ms ${EASE} ${index * 50}ms`;
+        node.style.transformOrigin = 'left';
+        node.style.transform = 'scaleX(1)';
       });
 
       const loop = engine.current;
       const count = rows.current.filter(Boolean).length;
-      const start = 950 + count * 55;
+      // Sweep band across rows after category text headers have cleanly risen
+      const start = 1100 + count * 50;
       const step = 260;
 
       for (let index = 0; index < count; index++) {
@@ -603,33 +585,48 @@ function FlowingMenu({
       );
     };
 
+    const reverseIntro = () => {
+      introPlayedRef.current = false;
+      const loop = engine.current;
+      loop.timers.forEach(clearTimeout);
+      loop.timers = [];
+
+      // Smooth reverse transitions for lines back down into masks
+      lines.forEach((node, index) => {
+        const reverseIdx = lines.length - 1 - index;
+        node.style.transition = `transform 600ms ${EASE} ${reverseIdx * 30}ms, opacity 500ms ease ${reverseIdx * 30}ms`;
+        node.style.transform = 'translateY(110%)';
+        node.style.opacity = '0';
+      });
+
+      fades.forEach(node => {
+        node.style.transition = 'opacity 400ms ease';
+        node.style.opacity = '0';
+      });
+
+      rules.forEach((node, index) => {
+        const reverseIdx = rules.length - 1 - index;
+        node.style.transition = `transform 550ms ${EASE} ${reverseIdx * 25}ms`;
+        node.style.transformOrigin = 'left';
+        node.style.transform = 'scaleX(0)';
+      });
+
+      const b = band.current;
+      b.shown = false;
+      b.index = -1;
+      rows.current.forEach(r => {
+        if (r?.band) {
+          r.band.style.clipPath = 'inset(50% 0 50% 0)';
+          r.band.style.visibility = 'hidden';
+        }
+      });
+    };
+
     if (typeof triggerIntro !== 'undefined') {
       if (triggerIntro) {
         playIntro();
       } else {
-        introPlayedRef.current = false;
-        const loop = engine.current;
-        loop.timers.forEach(clearTimeout);
-        loop.timers = [];
-        lines.forEach(node => {
-          node.style.transform = 'translateY(110%)';
-        });
-        fades.forEach(node => {
-          node.style.opacity = '0';
-        });
-        rules.forEach(node => {
-          node.style.transform = 'scaleX(0)';
-          node.style.transformOrigin = 'left';
-        });
-        const b = band.current;
-        b.shown = false;
-        b.index = -1;
-        rows.current.forEach(r => {
-          if (r?.band) {
-            r.band.style.clipPath = 'inset(50% 0 50% 0)';
-            r.band.style.visibility = 'hidden';
-          }
-        });
+        reverseIntro();
       }
       return () => {
         const loop = engine.current;
@@ -652,8 +649,7 @@ function FlowingMenu({
         }
       },
       {
-        rootMargin: '0px 0px -60% 0px',
-        threshold: 0
+        threshold: 0.15
       }
     );
 

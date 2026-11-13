@@ -172,9 +172,9 @@ export function SkillsSection({ className = "" }: { className?: string }) {
     paraInner.style.transform = "translateY(110%)";
     paraInner.style.opacity = "0";
     menuWrap.style.opacity = "0";
-    menuWrap.style.filter = "blur(16px)";
+    menuWrap.style.transform = "translateY(24px)";
 
-    let played = false;
+    let isRevealed = false;
     let timers: number[] = [];
 
     const clearAllTimers = () => {
@@ -182,72 +182,69 @@ export function SkillsSection({ className = "" }: { className?: string }) {
       timers = [];
     };
 
-    const reset = () => {
-      if (!played) return;
-      played = false;
-      clearAllTimers();
-      setTriggerMenuIntro(false);
-
-      headingInner.style.transition = "none";
-      headingInner.style.transform = "translateY(110%)";
-      headingInner.style.opacity = "0";
-
-      paraInner.style.transition = "none";
-      paraInner.style.transform = "translateY(110%)";
-      paraInner.style.opacity = "0";
-
-      menuWrap.style.transition = "none";
-      menuWrap.style.opacity = "0";
-      menuWrap.style.filter = "blur(16px)";
-    };
-
+    // ── FORWARD ANIMATION (When entering viewport past 50%) ──
     const play = () => {
-      if (played) return;
-      played = true;
+      if (isRevealed) return;
+      isRevealed = true;
       clearAllTimers();
-
-      // Ensure elements start from pre-hidden state
-      headingInner.style.transition = "none";
-      headingInner.style.transform = "translateY(110%)";
-      headingInner.style.opacity = "0";
-      paraInner.style.transition = "none";
-      paraInner.style.transform = "translateY(110%)";
-      paraInner.style.opacity = "0";
-      menuWrap.style.transition = "none";
-      menuWrap.style.opacity = "0";
-      menuWrap.style.filter = "blur(16px)";
-
-      // Force reflow
-      void headingInner.offsetHeight;
 
       // 1. Heading rises up at t=0
       headingInner.style.transition = `transform ${RISE_DURATION}ms ${EASE}, opacity ${RISE_DURATION}ms ${EASE}`;
       headingInner.style.transform = "translateY(0)";
       headingInner.style.opacity = "1";
 
-      // 2. Paragraph rises up at t=150ms
+      // 2. Paragraph rises up at t=120ms
       timers.push(
         window.setTimeout(() => {
           paraInner.style.transition = `transform ${RISE_DURATION}ms ${EASE}, opacity ${RISE_DURATION}ms ${EASE}`;
           paraInner.style.transform = "translateY(0)";
           paraInner.style.opacity = "1";
-        }, 150)
+        }, 120)
       );
 
-      // 3. FlowingMenu blurs in at t=450ms
+      // 3. FlowingMenu container rises up & fades in at t=280ms
       timers.push(
         window.setTimeout(() => {
-          menuWrap.style.transition = `opacity 900ms ease, filter 900ms ease`;
+          menuWrap.style.transition = `opacity 850ms ease, transform 850ms ${EASE}`;
           menuWrap.style.opacity = "1";
-          menuWrap.style.filter = "blur(0px)";
-        }, 450)
+          menuWrap.style.transform = "translateY(0)";
+        }, 280)
       );
 
-      // 4. FlowingMenu's category headers animate and band sweeps at t=650ms
+      // 4. FlowingMenu category text headers animate and band sweeps at t=420ms
       timers.push(
         window.setTimeout(() => {
           setTriggerMenuIntro(true);
-        }, 650)
+        }, 420)
+      );
+    };
+
+    // ── REVERSE ANIMATION (When scrolling back up past 50%) ──
+    const reverse = () => {
+      if (!isRevealed) return;
+      isRevealed = false;
+      clearAllTimers();
+
+      // 1. FlowingMenu items glide back down in reverse
+      setTriggerMenuIntro(false);
+
+      // 2. FlowingMenu container fades down
+      menuWrap.style.transition = `opacity 550ms ease, transform 550ms ${EASE}`;
+      menuWrap.style.opacity = "0";
+      menuWrap.style.transform = "translateY(24px)";
+
+      // 3. Paragraph glides back down
+      paraInner.style.transition = `transform 650ms ${EASE}, opacity 550ms ease`;
+      paraInner.style.transform = "translateY(110%)";
+      paraInner.style.opacity = "0";
+
+      // 4. Heading glides back down with small delay
+      timers.push(
+        window.setTimeout(() => {
+          headingInner.style.transition = `transform 650ms ${EASE}, opacity 550ms ease`;
+          headingInner.style.transform = "translateY(110%)";
+          headingInner.style.opacity = "0";
+        }, 70)
       );
     };
 
@@ -258,21 +255,16 @@ export function SkillsSection({ className = "" }: { className?: string }) {
         if (!headingClipRef.current) return;
         const rect = headingClipRef.current.getBoundingClientRect();
         const vh = window.innerHeight;
-        const isMobile = window.innerWidth < 1024;
 
-        // Trigger threshold: 65% from bottom on desktop (y = 0.35 * vh), 58% from bottom on mobile (y = 0.42 * vh)
-        const triggerY = isMobile ? vh * 0.42 : vh * 0.35;
-        // Reset threshold: when element scrolls back down to bottom 25% (or off-screen)
-        const resetY = vh * 0.75;
+        // Trigger threshold: 50% vertically as requested!
+        const triggerY = vh * 0.50;
+        // Reverse threshold: 56% (slight hysteresis so it smoothly reverses when scrolling back up)
+        const reverseY = vh * 0.56;
 
         if (rect.top <= triggerY && rect.bottom >= 0) {
-          if (!played) {
-            play();
-          }
-        } else if (rect.top > resetY) {
-          if (played) {
-            reset();
-          }
+          play();
+        } else if (rect.top > reverseY) {
+          reverse();
         }
       });
     };
