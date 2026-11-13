@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect } from "react";
+import { IntroReveal } from "@/components/IntroReveal";
+import { About } from "@/components/about/About";
+import { ScrollIndicator } from "@/components/about/ScrollIndicator";
+import { SkillsSection } from "@/components/skills/SkillsSection";
+
+/*
+// Commented out unused section imports per user request (only hero, about, skills, footer active on homepage):
 import { m } from "framer-motion";
 import Link from "next/link";
 import {
@@ -23,10 +30,6 @@ import { Magnetic } from "@/components/Magnetic";
 import { ReadyToArchitect } from "@/components/CTA";
 import { PortfolioProjectCard } from "@/components/PortfolioProjectCard";
 import WhatIfEditor from "@/components/WhatIfEditor";
-import { IntroReveal } from "@/components/IntroReveal";
-import { About } from "@/components/about/About";
-import { ScrollIndicator } from "@/components/about/ScrollIndicator";
-
 import {
   PROFILE,
   PROOF_STRIP,
@@ -37,11 +40,10 @@ import {
   LEADERSHIP_ITEMS,
   LENS_DETAILS,
 } from "@/data/portfolio-data";
+*/
 
 export default function HomePage() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isDesktop, setIsDesktop] = useState(false);
-  const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
 
   useEffect(() => {
     if (window.location.hash) {
@@ -55,7 +57,6 @@ export default function HomePage() {
     if ("scrollRestoration" in window.history) {
       window.history.scrollRestoration = "manual";
     }
-    setIsDesktop(window.matchMedia("(min-width: 768px)").matches);
   }, []);
 
   return (
@@ -83,10 +84,18 @@ export default function HomePage() {
           paddingTop: "15vh",
         }}
       >
-        <div className="existing-site-content w-full flex flex-col items-center">
-          {/* ──────────────────────────────────────────────────────────── */}
-          {/* 2. START-HERE PATHS */}
-          {/* ──────────────────────────────────────────────────────────── */}
+                <div className="w-full max-w-6xl mx-auto px-6 pb-20 z-20">
+          <SkillsSection />
+        </div>
+
+        {/* ────────────────────────────────────────────────────────────
+            COMMENTED OUT SECTIONS ON HOMEPAGE (Per user request:
+            only Hero, About, Skills, Footer active on homepage)
+           ────────────────────────────────────────────────────────────
+<div className="existing-site-content w-full flex flex-col items-center">
+          // ──────────────────────────────────────────────────────────── 
+          // 2. START-HERE PATHS 
+          // ──────────────────────────────────────────────────────────── 
           <section id="paths" className="w-full py-20 px-6 max-w-6xl mx-auto z-20">
             <div className="mb-12 text-center">
               <span className="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--text-secondary)]">
@@ -154,11 +163,11 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* ──────────────────────────────────────────────────────────── */}
-          {/* 3. STRONGEST EVIDENCE & FEATURED WORK */}
-          {/* ──────────────────────────────────────────────────────────── */}
+          // ──────────────────────────────────────────────────────────── 
+          // 3. STRONGEST EVIDENCE & FEATURED WORK 
+          // ──────────────────────────────────────────────────────────── 
           <section id="work" className="w-full py-20 px-6 max-w-6xl mx-auto z-20">
-            {/* Proof Strip */}
+            // Proof Strip 
             <div id="proof" className="mb-20">
               <div className="mb-8 flex flex-col items-center text-center">
                 <span className="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--text-secondary)]">
@@ -201,7 +210,7 @@ export default function HomePage() {
                 })}
               </div>
 
-              {/* Expanded Receipt Viewer */}
+              // Expanded Receipt Viewer 
               {selectedReceipt && (
                 <m.div
                   initial={{ opacity: 0, y: 10 }}
@@ -247,7 +256,7 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* Featured Projects Header */}
+            // Featured Projects Header 
             <div className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <span className="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--text-secondary)]">
@@ -266,16 +275,16 @@ export default function HomePage() {
               </Link>
             </div>
 
-            {/* 4 Flagship Project Cards Grid */}
+            // 4 Flagship Project Cards Grid 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
               {FEATURED_PROJECTS.map((project, idx) => (
                 <PortfolioProjectCard key={project.id} project={project} index={idx} />
               ))}
             </div>
 
-            {/* Two Conditional Slots */}
+            // Two Conditional Slots 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Research Slot: Samsung PRISM */}
+              // Research Slot: Samsung PRISM 
               <div className="p-8 rounded-[2.5rem] border border-[color:var(--cag-border)] bg-[color:var(--surface)] flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-4">
@@ -317,7 +326,7 @@ export default function HomePage() {
                 </Link>
               </div>
 
-              {/* Currently Building Slot: AI ERP Assistant */}
+              // Currently Building Slot: AI ERP Assistant 
               <div className="p-8 rounded-[2.5rem] border border-[color:var(--finetuning-border)] bg-[color:var(--surface)] flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-4">
@@ -360,9 +369,9 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* ──────────────────────────────────────────────────────────── */}
-          {/* 4. ONE DEMONSTRATION (ARCHGUIDE WHAT-IF) */}
-          {/* ──────────────────────────────────────────────────────────── */}
+          // ──────────────────────────────────────────────────────────── 
+          // 4. ONE DEMONSTRATION (ARCHGUIDE WHAT-IF) 
+          // ──────────────────────────────────────────────────────────── 
           <section id="demo" className="w-full py-20 px-6 max-w-6xl mx-auto z-20">
             <div className="mb-10 text-center">
               <span className="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--text-secondary)]">
@@ -379,12 +388,12 @@ export default function HomePage() {
             <WhatIfEditor />
           </section>
 
-          {/* ──────────────────────────────────────────────────────────── */}
-          {/* 5. EXPERIENCE & LEADERSHIP */}
-          {/* ──────────────────────────────────────────────────────────── */}
+          // ──────────────────────────────────────────────────────────── 
+          // 5. EXPERIENCE & LEADERSHIP 
+          // ──────────────────────────────────────────────────────────── 
           <section id="experience" className="w-full py-20 px-6 max-w-6xl mx-auto z-20">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-              {/* Experience Rail */}
+              // Experience Rail 
               <div className="lg:col-span-7 space-y-8">
                 <div>
                   <span className="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--text-secondary)]">
@@ -433,7 +442,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Leadership & Education Rail */}
+              // Leadership & Education Rail 
               <div className="lg:col-span-5 space-y-8">
                 <div>
                   <span className="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--text-secondary)]">
@@ -470,7 +479,7 @@ export default function HomePage() {
                   ))}
                 </div>
 
-                {/* Compact Education Line */}
+                // Compact Education Line 
                 <div className="p-6 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)]">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-[color:var(--text-secondary)] mb-3 flex items-center gap-2">
                     <GraduationCap size={16} className="text-[color:var(--text-primary)]" />
@@ -484,11 +493,12 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* ──────────────────────────────────────────────────────────── */}
-          {/* 6. CLOSING & CONTACT (CTA WITH 3D PARTICLES) */}
-          {/* ──────────────────────────────────────────────────────────── */}
+          // ──────────────────────────────────────────────────────────── 
+          // 6. CLOSING & CONTACT (CTA WITH 3D PARTICLES) 
+          // ──────────────────────────────────────────────────────────── 
           <ReadyToArchitect />
         </div>
+        */}
       </div>
     </div>
   );

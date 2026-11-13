@@ -2,8 +2,8 @@
 
 import React from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, CheckCircle2, GraduationCap, Compass, Sparkles } from "lucide-react";
-import { PROFILE, LENS_DETAILS } from "@/data/portfolio-data";
+import { ArrowLeft, GraduationCap } from "lucide-react";
+import { SkillsSection } from "@/components/skills/SkillsSection";
 
 export default function AboutPage() {
   const principles = [
@@ -31,43 +31,6 @@ export default function AboutPage() {
       title: "5. Build only what you can defend under questioning",
       desc: "I do not list technologies I've merely read about, nor do I present research in progress as completed production software. Transparency builds lasting trust.",
       example: "Explicitly labeling Samsung PRISM and HPE work as methodology only with no proprietary disclosures.",
-    },
-  ];
-
-  const skillsWithEvidence = [
-    {
-      lens: "Build" as const,
-      skills: [
-        { name: "Retrieval-Augmented Generation (RAG)", proof: "JustiBot, ArchGuide", href: "/work#justibot" },
-        { name: "Hybrid Search & Vector Indices", proof: "Dense + BM25 RRF in JustiBot", href: "/work#justibot" },
-        { name: "Streaming ML & Distributed Ingestion", proof: "Kafka + Spark in Fraud Detection", href: "/work#fraud-detection" },
-        { name: "Evaluation & Fallback Gates", proof: "5-metric evaluation suite", href: "/research#justibot-experiments" },
-      ],
-    },
-    {
-      lens: "Ship" as const,
-      skills: [
-        { name: "Next.js & Modern Web Architecture", proof: "BMSCE ACM Chapter Platform", href: "/work#acm-platform" },
-        { name: "API Engineering & Containerization", proof: "FastAPI / Flask / Docker", href: "/work#fraud-detection" },
-        { name: "Performance & Edge Optimization", proof: "Cloudflare migration to ~875ms", href: "/work#acm-platform" },
-        { name: "Storefront & E-Commerce Logic", proof: "Velvory at Kshipani Ventures", href: "/experience" },
-      ],
-    },
-    {
-      lens: "Investigate" as const,
-      skills: [
-        { name: "3D Scene Reconstruction", proof: "Samsung PRISM Methodology", href: "/research" },
-        { name: "3D Gaussian Splatting & View Synthesis", proof: "PRISM spatial queries", href: "/research" },
-        { name: "Model Evaluation & Integrity", proof: "Held-out testbed separation", href: "/research#fraud-models" },
-      ],
-    },
-    {
-      lens: "Lead" as const,
-      skills: [
-        { name: "Technical Community Architecture", proof: "100 Days of Code (1,200+ regs)", href: "/leadership#100-days-of-code" },
-        { name: "Engineering Team Direction", proof: "UTSAV 2026 9-person team", href: "/leadership" },
-        { name: "Cross-Chapter Governance", proof: "ACM India Regional Lead", href: "/leadership" },
-      ],
     },
   ];
 
@@ -144,63 +107,8 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Skills with Evidence (No bare keyword lists) */}
-      <section className="mb-16">
-        <div className="mb-8">
-          <span className="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--text-secondary)]">
-            Verified Competencies
-          </span>
-          <h2 className="text-2xl sm:text-3xl font-black text-[color:var(--text-primary)] mt-1">
-            Skills with Evidence
-          </h2>
-          <p className="text-xs text-[color:var(--text-secondary)] mt-1">
-            Every capability links directly to the project where it was implemented and evaluated.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {skillsWithEvidence.map((group) => {
-            const lensInfo = LENS_DETAILS[group.lens];
-            return (
-              <div
-                key={group.lens}
-                className="p-6 rounded-[2rem] border border-[color:var(--border)] bg-[color:var(--surface)]"
-              >
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-[color:var(--border)]">
-                  <span
-                    className={`text-xs font-bold px-3 py-1 rounded-full border ${lensInfo.bgClass} ${lensInfo.textClass}`}
-                  >
-                    Lens: {group.lens}
-                  </span>
-                  <span className="text-xs text-[color:var(--text-secondary)] font-mono">
-                    {group.skills.length} Capabilities
-                  </span>
-                </div>
-
-                <div className="space-y-3">
-                  {group.skills.map((s, i) => (
-                    <Link
-                      key={i}
-                      href={s.href}
-                      className="block p-3 rounded-xl bg-[color:var(--background)] border border-[color:var(--border)]/60 hover:border-[color:var(--text-primary)] transition-all group"
-                    >
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-[color:var(--text-primary)] group-hover:underline">
-                          {s.name}
-                        </span>
-                        <ArrowUpRight size={12} className="text-[color:var(--text-secondary)] group-hover:text-[color:var(--text-primary)]" />
-                      </div>
-                      <span className="text-[11px] text-[color:var(--text-secondary)] mt-0.5 block">
-                        Demonstrated in: {s.proof}
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+      {/* Skills Section (FlowingMenu) */}
+      <SkillsSection />
 
       {/* Education & Academic Record */}
       <section id="education" className="p-8 sm:p-10 rounded-[2.5rem] border border-[color:var(--border)] bg-[color:var(--surface)]">
