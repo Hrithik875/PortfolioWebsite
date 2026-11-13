@@ -5,6 +5,11 @@ import Lenis from "lenis";
 import { useIntro } from "@/context/IntroContext";
 import { gsap, ScrollTrigger } from "@/lib/gsap";
 
+let globalLenis: Lenis | null = null;
+export function getLenis(): Lenis | null {
+  return globalLenis;
+}
+
 export function LenisProvider({ children }: { children: ReactNode }) {
   const { introDone } = useIntro();
 
@@ -27,6 +32,11 @@ export function LenisProvider({ children }: { children: ReactNode }) {
         wheelMultiplier: 0.9,
       });
 
+      globalLenis = lenis;
+      if (typeof window !== "undefined") {
+        (window as unknown as { __lenis?: Lenis }).__lenis = lenis;
+      }
+
       lenis.on("scroll", ScrollTrigger.update);
       tick = (time: number) => lenis?.raf(time * 1000);
       gsap.ticker.add(tick);
@@ -40,6 +50,10 @@ export function LenisProvider({ children }: { children: ReactNode }) {
 
     return () => {
       clearTimeout(timeout);
+      globalLenis = null;
+      if (typeof window !== "undefined") {
+        delete (window as unknown as { __lenis?: Lenis }).__lenis;
+      }
       if (tick) gsap.ticker.remove(tick);
       lenis?.destroy();
     };

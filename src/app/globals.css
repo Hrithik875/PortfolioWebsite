@@ -266,3 +266,17 @@ html.intro-loading .hero-rise-delay {
   display: block !important;
 }
 
+/* Skills FlowingMenu monochrome logo contrast handling */
+.fm-mono-logo {
+  transition: filter 250ms ease;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.7));
+}
+
+/* In Light Theme: the marquee band has a black background (#000) with white text.
+   Invert monochrome dark logos so they appear as crisp white on the black band. */
+[data-theme="light"] .fm-band .fm-mono-logo {
+  filter: invert(1);
+}
+
+
+
