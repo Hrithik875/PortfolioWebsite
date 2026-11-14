@@ -145,7 +145,6 @@ export function IntroReveal() {
         // Split text matching index.js exactly
         splitTextElements(".intro-title h1", "words, chars", true);
         splitTextElements(".outro-title h1");
-        splitTextElements(".tag p", "words");
         splitTextElements(".card h1", "words, chars", true);
 
         // Recompute isMobile on load/mount
@@ -241,33 +240,20 @@ export function IntroReveal() {
         const hNaturalLeft = hRect && hRect.width > 0 ? hRect.left : window.innerWidth / 2 - 100;
         const finalX_H = targetHLeft - hNaturalLeft;
 
-        // Vertical alignment: Top of H = Top of M
-        // M's line box is centered at viewport 50%.
-        // Distance from top of M's line box to M's cap height is (mFontAscent - mAscent).
-        // H's unscaled line box is also centered at 50%.
-        // When scaled by H_SCALE with transform-origin: top left,
-        // distance from top of H's box to H's cap height is (hFontAscent - hAscent).
-        const finalY_H = (H_START_SIZE - M_SIZE) / 2 + (mFontAscent - mAscent) - (hFontAscent - hAscent);
+        // Vertical alignment: Top of H = Top of M, placed entirely in the top half (above 50% split)
+        // M's line box at M_SIZE has height M_SIZE and is centered at viewport 50% (line box top at 50% - M_SIZE/2).
+        // H has H_SCALE = H_SIZE / H_START_SIZE = (M_SIZE/2) / H_START_SIZE.
+        // Translating H by (H_START_SIZE - M_SIZE) / 2 places H's line box top at (50% - M_SIZE/2)
+        // and its line box bottom at exactly 50% (the midline).
+        // A slight -2px offset guarantees that sub-pixel rounding / anti-aliasing never crosses 50%.
+        const finalY_H = (H_START_SIZE - M_SIZE) / 2 - 2;
 
         // Keep existing pull-apart movement (+3rem on desktop, +1rem on mobile)
         const pullApartDelta = (isMobile ? 1.0 : 3.0) * rem;
         const pullApartX_H = finalX_H + pullApartDelta;
 
-        // Initial positions for split-overlay (identical to preloader final state)
-        gsap.set(
-          [
-            ".split-overlay .intro-title .first-char span",
-            ".split-overlay .outro-title .char span",
-          ],
-          { y: "0%" }
-        );
-
-        gsap.set(".split-overlay .intro-title .first-char", {
-          x: finalX_H,
-          y: finalY_H,
-          scale: H_SCALE,
-          force3D: true,
-        });
+        // Initial positions for split-overlay (bottom half of M)
+        gsap.set(".split-overlay .outro-title .char span", { y: "0%" });
 
         gsap.set(".split-overlay .outro-title .char", {
           x: finalX_M,
@@ -290,19 +276,6 @@ export function IntroReveal() {
             setIsFinished(true);
             setIntroDone(true);
           },
-        });
-
-        const tags = gsap.utils.toArray<HTMLElement>(root.querySelectorAll(".tag"));
-
-        tags.forEach((tag, index) => {
-          tl.to(
-            tag.querySelectorAll("p .word"),
-            {
-              y: "0%",
-              duration: 0.75,
-            },
-            0.5 + index * 0.1
-          );
         });
 
         tl.to(
@@ -388,17 +361,6 @@ export function IntroReveal() {
             },
             5
           );
-
-        tags.forEach((tag, index) => {
-          tl.to(
-            tag.querySelectorAll("p .word"),
-            {
-              y: "100%",
-              duration: 0.75,
-            },
-            5.5 + index * 0.1
-          );
-        });
 
         tl.to(
           [".preloader", ".split-overlay"],
@@ -516,18 +478,6 @@ export function IntroReveal() {
             </div>
             <div className="outro-title">
               <h1>M</h1>
-            </div>
-          </div>
-
-          <div className="tags-overlay">
-            <div className="tag tag-1">
-              <p>Retrieval</p>
-            </div>
-            <div className="tag tag-2">
-              <p>Streaming ML</p>
-            </div>
-            <div className="tag tag-3">
-              <p>Evaluation</p>
             </div>
           </div>
         </>

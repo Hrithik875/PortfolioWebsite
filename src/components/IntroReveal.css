@@ -35,7 +35,7 @@
   height: 100svh;
   z-index: 99999;
   overflow: hidden;
-  background-color: #0a0a0a;
+  background-color: #d20c0c;
 }
 
 .intro-reveal.is-done {
@@ -91,7 +91,7 @@
 
 .intro-reveal .preloader,
 .intro-reveal .split-overlay {
-  background-color: #0a0a0a;
+  background-color: #d20c0c;
   color: #fff;
 }
 
@@ -102,6 +102,10 @@
 
 .intro-reveal .split-overlay {
   z-index: 1;
+}
+
+.intro-reveal .split-overlay .intro-title {
+  display: none !important;
 }
 
 /* Initial blank screen state: hide preloader typography until SplitText and GSAP are ready */
