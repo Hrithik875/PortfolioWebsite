@@ -184,6 +184,7 @@ uniform float u_glow;     // aura gain
 uniform float u_beam;     // beam gain (log10 offset applied)
 uniform float u_reach;    // horizontal reach multiplier
 uniform float u_hair;     // glass hairline visibility
+uniform float u_cornerBlur; // corner blur/feather strength 0..1
 uniform vec3  u_bg;
 uniform mat3  u_cmat;     // palette remap (identity for default colours)
 
