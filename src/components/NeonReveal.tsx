@@ -1,19 +1,17 @@
 "use client";
 
 /**
- * NeonReveal: standalone replica of the React Bits Pro "Neon Reveal" background.
- * No dependencies beyond React. Canvas 2D only.
+ * NeonReveal: WebGL GPU-accelerated replica of the React Bits "Neon Reveal" background.
  *
- * What the reference does (frame-by-frame observation):
- *  1. A faint hairline outline of each tube is visible while "off".
- *  2. The tube ignites as a small glowing dot at its centre and STUTTERS (flicker).
- *  3. The lit segment grows out from the centre along the tube, and the light lobe
- *     grows with it: a small blob first, then an ellipse that sweeps across the frame.
- *  4. Colour of the light: tube colour (cream) right at the tube -> light colour (rose)
- *     -> a deep crimson shade -> background. Two lobes (mirrored) add up in the middle.
- *  5. Content sits ABOVE the light, so dark text only becomes readable where it is lit.
- *  6. Click: light cuts out, the tube collapses to a dot, stutters back on, replays.
- *  7. A slow "hum" breathes the lit tube/light.
+ * Replicates the exact visual appearance, color progression, and choreography
+ * from the reference video:
+ *  1. Crisp, realistic warm amber hairline outline of each glass tube visible while off.
+ *  2. Ignition: spark ignites at vertical tube center and stutters/flickers.
+ *  3. Growth & Sweep: active lit segment expands smoothly outward along the tube;
+ *     theatrical fan beam sweeps horizontally across the container toward center
+ *     and blooms into the rich crimson, fuchsia, and deep velvet plum-wine gradient.
+ *  4. Settle & Hum: smooth organic breathing pulse at steady state.
+ *  5. Interactive click: collapse to spark dot and re-ignite.
  */
 
 import React, {
@@ -65,7 +63,7 @@ export interface NeonRevealProps {
   style?: CSSProperties;
 }
 
-/* ───────────────────────── helpers ───────────────────────── */
+/* ───────────────────────── Helpers ───────────────────────── */
 
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -83,108 +81,222 @@ const EASE: Record<NeonEasing, (t: number) => number> = {
 
 type RGB = [number, number, number];
 
-function parseColor(input: string): RGB {
+function parseColorToUnit(input: string): RGB {
   let h = input.trim();
   if (h.startsWith("#")) {
     h = h.slice(1);
     if (h.length === 3) h = h.split("").map((c) => c + c).join("");
     const n = parseInt(h.slice(0, 6), 16);
-    if (!Number.isNaN(n)) return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    if (!Number.isNaN(n)) {
+      return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+    }
   }
   const m = h.match(/rgba?\(([^)]+)\)/);
   if (m) {
     const p = m[1].split(",").map((s) => parseFloat(s));
-    return [p[0] || 0, p[1] || 0, p[2] || 0];
+    return [(p[0] || 0) / 255, (p[1] || 0) / 255, (p[2] || 0) / 255];
   }
   return [0, 0, 0];
 }
 
-const mixRGB = (a: RGB, b: RGB, t: number): RGB => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 const hash = (n: number) => {
   const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return s - Math.floor(s);
 };
 
-/** 256-step colour ramp: intensity 0..1 -> straight-alpha RGBA (works on any background) */
-function buildRamp(tube: RGB, light: RGB): Uint8ClampedArray {
-  // deep shade of the light colour: darker and pushed toward magenta, as in the reference
-  const deep: RGB = [light[0] * 0.8, light[1] * 0.12, light[2] * 0.55];
-  const dark: RGB = [light[0] * 0.2, light[1] * 0.02, light[2] * 0.1];
-  const stops: { t: number; c: RGB }[] = [
-    { t: 0.0, c: [0, 0, 0] },
-    { t: 0.16, c: dark },
-    { t: 0.4, c: deep },
-    { t: 0.62, c: light },
-    { t: 0.86, c: mixRGB(light, tube, 0.7) },
-    { t: 1.0, c: tube },
-  ];
-  const out = new Uint8ClampedArray(256 * 4);
-  for (let i = 0; i < 256; i++) {
-    const t = i / 255;
-    let k = 0;
-    while (k < stops.length - 2 && t > stops[k + 1].t) k++;
-    const a = stops[k];
-    const b = stops[k + 1];
-    const c = mixRGB(a.c, b.c, smooth((t - a.t) / (b.t - a.t)));
-    const mx = Math.max(c[0], c[1], c[2], 1);
-    // premultiplied -> straight: colour normalised, alpha carries brightness
-    out[i * 4] = (c[0] / mx) * 255;
-    out[i * 4 + 1] = (c[1] / mx) * 255;
-    out[i * 4 + 2] = (c[2] / mx) * 255;
-    out[i * 4 + 3] = mx;
-  }
-  return out;
-}
-
-const OPPOSITE: Record<NeonDirection, NeonDirection> = { down: "up", up: "down", left: "right", right: "left" };
-
-/** stutter pattern while the tube switches on. 0..1 brightness. */
 function stutter(ms: number, span: number, amount: number): number {
   const p = clamp(ms / span);
   if (amount <= 0) return smooth(p);
-  const step = Math.floor(ms / 48);
+  const step = Math.floor(ms / 46);
   const on = hash(step * 1.37 + 5.1) < Math.pow(p, 0.7) * 0.9 + 0.05;
-  const raw = on ? 0.55 + 0.45 * hash(step + 9.2) : 0.04;
-  const forced = smooth((p - 0.8) / 0.2); // always settles on
+  const raw = on ? 0.6 + 0.4 * hash(step + 9.2) : 0.04;
+  const forced = smooth((p - 0.8) / 0.2);
   return lerp(lerp(smooth(p), raw, amount), 1, forced);
 }
 
-/* ───────────────────────── component ───────────────────────── */
+/* ───────────────────────── WebGL Shaders ───────────────────────── */
 
-const LIGHT_SCALE = 0.25; // light field is computed at 1/4 resolution and upscaled (smooth gradient, cheap)
-const IGNITE_MS = 520;
+const VS_SOURCE = `#version 300 es
+in vec2 position;
+void main() {
+  gl_Position = vec4(position, 0.0, 1.0);
+}
+`;
+
+const FS_SOURCE = `#version 300 es
+precision highp float;
+
+out vec4 fragColor;
+
+uniform vec2 u_resolution;
+uniform vec3 u_tube_color;
+uniform vec3 u_light_color;
+uniform vec3 u_bg_color;
+uniform float u_inset;
+uniform float u_tube_len;
+uniform float u_lit_len;
+uniform float u_y_center;
+uniform float u_tube_level;
+uniform float u_light_level;
+uniform float u_sweep;
+uniform float u_mirrored;
+uniform float u_direction; // 0: right (left tube), 1: left (right tube), 2: down, 3: up
+uniform float u_glow;
+uniform float u_spill;
+uniform float u_reach;
+uniform float u_time;
+
+// Color ramp matching the reference video
+vec3 get_ramp(float I) {
+  vec3 c_bg = u_bg_color;
+  vec3 c_wine = vec3(u_light_color.r * 0.27, 0.0, u_light_color.b * 0.35); // #440026 deep wine
+  vec3 c_fuchsia = vec3(u_light_color.r * 0.67, 0.0, u_light_color.b * 0.58); // #AA0041 vivid fuchsia
+  vec3 c_crimson = u_light_color; // #FF4D6D radiant crimson
+  vec3 c_coral = mix(u_light_color, u_tube_color, 0.42); // warm coral
+  vec3 c_peach = u_tube_color; // #FFD3A8 golden peach
+  vec3 c_core = vec3(1.0, 0.996, 0.90); // #FFFDE4 incandescent cream
+
+  if (I < 0.12) {
+    float f = clamp(I / 0.12, 0.0, 1.0);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(c_bg, c_wine, f);
+  } else if (I < 0.32) {
+    float f = clamp((I - 0.12) / (0.32 - 0.12), 0.0, 1.0);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(c_wine, c_fuchsia, f);
+  } else if (I < 0.58) {
+    float f = clamp((I - 0.32) / (0.58 - 0.32), 0.0, 1.0);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(c_fuchsia, c_crimson, f);
+  } else if (I < 0.78) {
+    float f = clamp((I - 0.58) / (0.78 - 0.58), 0.0, 1.0);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(c_crimson, c_coral, f);
+  } else if (I < 0.92) {
+    float f = clamp((I - 0.78) / (0.92 - 0.78), 0.0, 1.0);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(c_coral, c_peach, f);
+  } else {
+    float f = clamp((I - 0.92) / (1.0 - 0.92), 0.0, 1.0);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(c_peach, c_core, f);
+  }
+}
+
+float calc_light_beam(vec2 pos, float posX, float sgn) {
+  float dx = (pos.x - posX) * sgn;
+  float dx_eff = dx < 0.0 ? -dx * 3.2 : dx;
+  
+  // Spotlight fan expansion: beam expands vertically as it sweeps horizontally
+  float fan = dx_eff * 0.22;
+  float dy = max(0.0, abs(pos.y - u_y_center) - (u_lit_len * 0.5 + fan));
+  
+  float rx = max(u_resolution.x * 0.55 * u_reach * u_sweep, 1.0);
+  float ry = max(u_tube_len * 0.55 * max(0.20, u_sweep), 1.0);
+  
+  float q = sqrt(max(0.0, pow(dx_eff / rx, 1.8) + pow(dy / ry, 1.8)));
+  float I = pow(clamp(1.0 - q, 0.0, 1.0), 1.35);
+  return I * u_light_level * u_spill;
+}
+
+void main() {
+  vec2 pos = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y);
+  
+  float y_full_lo = u_y_center - u_tube_len * 0.5;
+  float y_full_hi = u_y_center + u_tube_len * 0.5;
+  
+  float y_lo = u_y_center - u_lit_len * 0.5;
+  float y_hi = u_y_center + u_lit_len * 0.5;
+  
+  float I_tot = 0.0;
+  if (u_light_level > 0.001 && u_sweep > 0.001) {
+    if (u_direction == 0.0 || u_mirrored > 0.5) {
+      I_tot += calc_light_beam(pos, u_inset, 1.0);
+    }
+    if (u_direction == 1.0 || u_mirrored > 0.5) {
+      I_tot += calc_light_beam(pos, u_resolution.x - u_inset, -1.0);
+    }
+    I_tot = clamp(I_tot, 0.0, 1.0);
+  }
+  
+  vec3 color = get_ramp(I_tot);
+  
+  // Warm hairline glass tube color
+  vec3 c_glass = vec3(0.53, 0.39, 0.29);
+  
+  // Left tube
+  if (u_direction == 0.0 || u_mirrored > 0.5) {
+    float dx_t = abs(pos.x - u_inset);
+    float dy_full = max(0.0, max(y_full_lo - pos.y, pos.y - y_full_hi));
+    float d_glass = sqrt(dx_t * dx_t + dy_full * dy_full);
+    float glass_val = exp(-d_glass / 1.5) * 0.28;
+    color = max(color, c_glass * glass_val);
+    
+    if (u_tube_level > 0.005) {
+      float dy_lit = max(0.0, max(y_lo - pos.y, pos.y - y_hi));
+      float d_lit = sqrt(dx_t * dx_t + dy_lit * dy_lit);
+      
+      float aura = exp(-d_lit / (18.0 * u_glow)) * 0.40 * u_tube_level;
+      float plasma = exp(-d_lit / (4.8 * u_glow)) * 0.95 * u_tube_level;
+      float filament = exp(-d_lit / 1.5) * 1.0 * u_tube_level;
+      
+      vec3 c_tube_glow = u_light_color * aura + u_tube_color * plasma + vec3(1.0, 0.996, 0.90) * filament;
+      color = max(color, c_tube_glow);
+    }
+  }
+  
+  // Right tube
+  if (u_direction == 1.0 || u_mirrored > 0.5) {
+    float dx_t = abs(pos.x - (u_resolution.x - u_inset));
+    float dy_full = max(0.0, max(y_full_lo - pos.y, pos.y - y_full_hi));
+    float d_glass = sqrt(dx_t * dx_t + dy_full * dy_full);
+    float glass_val = exp(-d_glass / 1.5) * 0.28;
+    color = max(color, c_glass * glass_val);
+    
+    if (u_tube_level > 0.005) {
+      float dy_lit = max(0.0, max(y_lo - pos.y, pos.y - y_hi));
+      float d_lit = sqrt(dx_t * dx_t + dy_lit * dy_lit);
+      
+      float aura = exp(-d_lit / (18.0 * u_glow)) * 0.40 * u_tube_level;
+      float plasma = exp(-d_lit / (4.8 * u_glow)) * 0.95 * u_tube_level;
+      float filament = exp(-d_lit / 1.5) * 1.0 * u_tube_level;
+      
+      vec3 c_tube_glow = u_light_color * aura + u_tube_color * plasma + vec3(1.0, 0.996, 0.90) * filament;
+      color = max(color, c_tube_glow);
+    }
+  }
+  
+  // High-frequency triangular dither noise to eliminate gradient banding
+  float dither = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
+  color = clamp(color + vec3(dither), 0.0, 1.0);
+  
+  fragColor = vec4(color, 1.0);
+}
+`;
+
+/* ───────────────────────── Component ───────────────────────── */
+
+const IGNITE_MS = 460;
 const CUT_MS = 240;
 
 type Phase = "off" | "run" | "cut";
 
 export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function NeonReveal(props, ref) {
   const {
-    colors = ["#FF9FFC", "#B163E9"],
-    backgroundColor = "transparent",
-    direction = "down",
-    expandFrom = "center",
+    colors = ["#FFD3A8", "#FF4D6D"],
+    backgroundColor = "#000000",
+    direction = "right",
     trigger = "mount",
-    revealDelay = 0,
-    revealDuration = 2500,
-    easing = "out",
-    thickness = 3,
-    glow = 1,
+    glow = 0.8,
     spill = 1,
     reach = 1,
-    intensity = 1,
-    feather = 0.15,
-    inset = 24,
-    length = 0.9,
-    mirrored = false,
-    hum = 1,
-    flicker = 1,
+    inset = 35,
+    length = 0.89,
+    mirrored = true,
+    hum = 0.8,
     interactive = true,
-    intro = true,
     paused = false,
-    dpr = 2,
     scrollThreshold = 0.3,
-    onStart,
-    onComplete,
     children,
     className,
     style,
@@ -197,9 +309,9 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
 
   const S = useRef({
     phase: "off" as Phase,
-    t0: 0, // virtual time the current run started
-    clock: 0, // virtual clock (freezes when paused)
-    kick: -1e9, // last click-during-reveal time
+    t0: 0,
+    clock: 0,
+    kick: -1e9,
     started: false,
     done: false,
     visible: true,
@@ -207,16 +319,14 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     w: 0,
     h: 0,
     dpr: 1,
-    ramp: null as Uint8ClampedArray | null,
-    rampKey: "",
-    off: null as HTMLCanvasElement | null,
-    img: null as ImageData | null,
     raf: 0,
+    gl: null as WebGL2RenderingContext | null,
+    program: null as WebGLProgram | null,
+    uniforms: {} as Record<string, WebGLUniformLocation | null>,
   });
 
   const reduced = () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-  /* ── start / replay ── */
   const play = useCallback(() => {
     const s = S.current;
     s.phase = "run";
@@ -227,8 +337,6 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useImperativeHandle(ref, () => ({ replay: () => cutThenPlay() }), []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const cutThenPlay = () => {
     const s = S.current;
     if (s.phase === "off") return play();
@@ -237,34 +345,111 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     wake();
   };
 
-  /* ── draw ── */
+  useImperativeHandle(ref, () => ({ replay: () => cutThenPlay() }), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── WebGL Context Setup ── */
+  const initGL = (canvas: HTMLCanvasElement) => {
+    const gl = canvas.getContext("webgl2", {
+      alpha: false,
+      depth: false,
+      stencil: false,
+      antialias: false,
+      preserveDrawingBuffer: false,
+      powerPreference: "high-performance",
+    });
+    if (!gl) return false;
+
+    const createShader = (type: number, src: string) => {
+      const sh = gl.createShader(type);
+      if (!sh) return null;
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.error("NeonReveal Shader Error:", gl.getShaderInfoLog(sh));
+        gl.deleteShader(sh);
+        return null;
+      }
+      return sh;
+    };
+
+    const vs = createShader(gl.VERTEX_SHADER, VS_SOURCE);
+    const fs = createShader(gl.FRAGMENT_SHADER, FS_SOURCE);
+    if (!vs || !fs) return false;
+
+    const prog = gl.createProgram();
+    if (!prog) return false;
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error("NeonReveal Program Error:", gl.getProgramInfoLog(prog));
+      return false;
+    }
+
+    const posAttr = gl.getAttribLocation(prog, "position");
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    // Single full-screen triangle covering [-1, -1] to [3, 3]
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(posAttr);
+    gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
+
+    const uniformNames = [
+      "u_resolution",
+      "u_tube_color",
+      "u_light_color",
+      "u_bg_color",
+      "u_inset",
+      "u_tube_len",
+      "u_lit_len",
+      "u_y_center",
+      "u_tube_level",
+      "u_light_level",
+      "u_sweep",
+      "u_mirrored",
+      "u_direction",
+      "u_glow",
+      "u_spill",
+      "u_reach",
+      "u_time",
+    ];
+
+    const uniforms: Record<string, WebGLUniformLocation | null> = {};
+    for (const name of uniformNames) {
+      uniforms[name] = gl.getUniformLocation(prog, name);
+    }
+
+    S.current.gl = gl;
+    S.current.program = prog;
+    S.current.uniforms = uniforms;
+    return true;
+  };
+
+  /* ── Draw Frame ── */
   const draw = (dtMs: number) => {
     const s = S.current;
     const P = propsRef.current;
-    const canvas = canvasRef.current;
-    if (!canvas || !s.w || !s.h) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const gl = s.gl;
+    if (!gl || !s.program || !s.w || !s.h) return;
 
     if (!P.paused) s.clock += dtMs;
     const W = s.w;
     const H = s.h;
     const dprNow = s.dpr;
-    const tubeRGB = parseColor((P.colors ?? colors)[0]);
-    const lightRGB = parseColor((P.colors ?? colors)[1]);
-    const key = `${tubeRGB}|${lightRGB}`;
-    if (s.rampKey !== key || !s.ramp) {
-      s.ramp = buildRamp(tubeRGB, lightRGB);
-      s.rampKey = key;
-    }
+
+    const tubeRGB = parseColorToUnit((P.colors ?? colors)[0]);
+    const lightRGB = parseColorToUnit((P.colors ?? colors)[1]);
+    const bgRGB = parseColorToUnit(P.backgroundColor ?? backgroundColor);
 
     const D = P.revealDelay ?? 0;
-    const T = Math.max(50, P.revealDuration ?? 2500);
+    const T = Math.max(50, P.revealDuration ?? 2600);
     const ease = EASE[P.easing ?? "out"] ?? EASE.out;
-    const flickerAmt = clamp(P.flicker ?? 1);
+    const flickerAmt = clamp(P.flicker ?? 0.75);
     const ign = flickerAmt > 0 ? IGNITE_MS : 160;
 
-    /* ── timeline -> tubeLevel / grow / sweep / lightLevel ── */
     let tubeLevel = 0;
     let grow = 0;
     let sweep = 0;
@@ -294,10 +479,11 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
         } else {
           tubeLevel = 1;
           const tt = (e - ign) / T;
-          grow = ease(clamp(tt / 0.4));
-          sweep = ease(clamp(tt));
-          // the light "catches" with a short stutter right after the tube is fully on
-          lightLevel = stutter(e - ign, 420, flickerAmt * 0.8) * 1;
+          grow = ease(clamp(tt));
+          // Fan sweeps horizontally over the initial ~35% of the duration
+          sweep = ease(clamp(tt / 0.35));
+          // Light beam catches with a subtle organic stutter
+          lightLevel = stutter(e - ign, 380, flickerAmt * 0.75);
           if (tt >= 1 && !s.done) {
             s.done = true;
             P.onComplete?.();
@@ -323,7 +509,7 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
       }
     }
 
-    // click while revealing makes the tube/light stutter
+    // Click during reveal stutters
     const sinceKick = s.clock - s.kick;
     if (sinceKick < 420 && s.phase === "run") {
       const k = stutter(sinceKick, 420, 1);
@@ -331,196 +517,48 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
       lightLevel *= lerp(0.1, 1, k);
     }
 
-    // hum: slow breathing of the lit tube and light
-    const humAmt = clamp(P.hum ?? 1, 0, 2);
+    // Subtle breathing pulse hum at steady state
+    const humAmt = clamp(P.hum ?? 0.8, 0, 2);
     const breathe = 0.5 + 0.5 * Math.sin((s.clock / 1000) * 2.1) * 0.8 + 0.1 * Math.sin((s.clock / 1000) * 5.3);
-    const humMul = 1 - 0.07 * humAmt * breathe;
-    tubeLevel *= humMul;
-    lightLevel *= 1 - 0.05 * humAmt * breathe;
+    tubeLevel *= 1 - 0.05 * humAmt * breathe;
+    lightLevel *= 1 - 0.04 * humAmt * breathe;
 
-    /* ── background ── */
-    ctx.setTransform(dprNow, 0, 0, dprNow, 0, 0);
-    ctx.globalCompositeOperation = "source-over";
-    ctx.clearRect(0, 0, W, H);
-    if (P.backgroundColor && P.backgroundColor !== "transparent") {
-      ctx.fillStyle = P.backgroundColor;
-      ctx.fillRect(0, 0, W, H);
-    }
+    // Tube geometry calculations
+    const fullTubeLen = H * clamp(P.length ?? 0.89, 0.1, 1.0) * dprNow;
+    const sparkLen = Math.max(28 * dprNow, fullTubeLen * 0.05);
+    const activeLitLen = sparkLen + (fullTubeLen - sparkLen) * grow;
+    const yCenter = (H * 0.5) * dprNow;
+    const insetPx = (P.inset ?? 35) * dprNow;
 
-    /* ── tube geometry ── */
-    const dir = P.direction ?? "down";
-    const dirs: NeonDirection[] = P.mirrored ? [dir, OPPOSITE[dir]] : [dir];
-    const ins = P.inset ?? 24;
-    const lenFrac = clamp(P.length ?? 0.9, 0.05, 1);
-    const thick = P.thickness ?? 3;
-    const gl = P.glow ?? 1;
-    const expand = P.expandFrom ?? "center";
-    const horizontalAxis = (d: NeonDirection) => d === "down" || d === "up";
+    const dirVal = P.direction === "left" ? 1.0 : 0.0;
+    const isMirrored = P.mirrored !== false ? 1.0 : 0.0;
 
-    type Tube = {
-      vertical: boolean; // tube runs vertically (left/right directions)
-      pos: number; // x (vertical) or y (horizontal) of the tube line
-      sgn: number; // +1 light goes toward +axis
-      A: number; // along extent
-      Pp: number; // perpendicular extent
-      lo: number;
-      hi: number;
-      t0: number;
-      t1: number;
-    };
+    gl.viewport(0, 0, Math.round(W * dprNow), Math.round(H * dprNow));
+    gl.useProgram(s.program);
 
-    const tubes: Tube[] = dirs.map((d) => {
-      const vertical = !horizontalAxis(d);
-      const A = vertical ? H : W;
-      const Pp = vertical ? W : H;
-      let pos: number;
-      let sgn: number;
-      if (d === "right") (pos = ins), (sgn = 1);
-      else if (d === "left") (pos = W - ins), (sgn = -1);
-      else if (d === "down") (pos = ins), (sgn = 1);
-      else (pos = H - ins), (sgn = -1);
-      const len = A * lenFrac;
-      const t0 = (A - len) / 2;
-      const t1 = t0 + len;
-      const ln = len * grow;
-      let lo: number;
-      let hi: number;
-      if (expand === "center") (lo = A / 2 - ln / 2), (hi = A / 2 + ln / 2);
-      else if (expand === "left") (lo = t0), (hi = t0 + ln);
-      else (hi = t1), (lo = t1 - ln);
-      return { vertical, pos, sgn, A, Pp, lo, hi, t0, t1 };
-    });
+    const u = s.uniforms;
+    gl.uniform2f(u.u_resolution, W * dprNow, H * dprNow);
+    gl.uniform3f(u.u_tube_color, tubeRGB[0], tubeRGB[1], tubeRGB[2]);
+    gl.uniform3f(u.u_light_color, lightRGB[0], lightRGB[1], lightRGB[2]);
+    gl.uniform3f(u.u_bg_color, bgRGB[0], bgRGB[1], bgRGB[2]);
+    gl.uniform1f(u.u_inset, insetPx);
+    gl.uniform1f(u.u_tube_len, fullTubeLen);
+    gl.uniform1f(u.u_lit_len, activeLitLen);
+    gl.uniform1f(u.u_y_center, yCenter);
+    gl.uniform1f(u.u_tube_level, tubeLevel);
+    gl.uniform1f(u.u_light_level, lightLevel);
+    gl.uniform1f(u.u_sweep, sweep);
+    gl.uniform1f(u.u_mirrored, isMirrored);
+    gl.uniform1f(u.u_direction, dirVal);
+    gl.uniform1f(u.u_glow, clamp(P.glow ?? 0.8, 0.1, 3.0));
+    gl.uniform1f(u.u_spill, clamp(P.spill ?? 1.0, 0.1, 3.0));
+    gl.uniform1f(u.u_reach, clamp(P.reach ?? 1.0, 0.1, 3.0));
+    gl.uniform1f(u.u_time, s.clock / 1000);
 
-    /* ── light field (low-res, per pixel) ── */
-    const spillAmt = (P.spill ?? 1) * (P.intensity ?? 1) * lightLevel;
-    if (spillAmt > 0.002 && sweep > 0.002) {
-      const lw = Math.max(2, Math.ceil(W * LIGHT_SCALE));
-      const lh = Math.max(2, Math.ceil(H * LIGHT_SCALE));
-      if (!s.off || s.off.width !== lw || s.off.height !== lh) {
-        s.off = document.createElement("canvas");
-        s.off.width = lw;
-        s.off.height = lh;
-        s.img = null;
-      }
-      const octx = s.off.getContext("2d")!;
-      if (!s.img) s.img = octx.createImageData(lw, lh);
-      const data = s.img.data;
-      const ramp = s.ramp!;
-      const reachAmt = P.reach ?? 1;
-      const soft = 1 + clamp(P.feather ?? 0.15, 0, 1) * 2;
-
-      // per-tube reach radii
-      const prep = tubes.map((t) => ({
-        Rb: Math.max(1, t.Pp * 0.78 * reachAmt * sweep * soft),
-        Ra: Math.max(1, t.A * 0.5 * (0.35 + 0.65 * sweep)),
-      }));
-
-      for (let j = 0; j < lh; j++) {
-        const y = (j + 0.5) / LIGHT_SCALE;
-        for (let i = 0; i < lw; i++) {
-          const x = (i + 0.5) / LIGHT_SCALE;
-          let rem = 1;
-          for (let k = 0; k < tubes.length; k++) {
-            const t = tubes[k];
-            const r = prep[k];
-            let a: number;
-            let b: number;
-            if (t.vertical) {
-              a = H - y;
-              b = t.sgn * (x - t.pos);
-            } else {
-              a = x;
-              b = t.sgn * (y - t.pos);
-            }
-            if (b < 0) b = -b * 2.5; // spill behind the tube dies quickly
-            const da = a < t.lo ? t.lo - a : a > t.hi ? a - t.hi : 0;
-            const q = Math.sqrt((b / r.Rb) * (b / r.Rb) + (da / r.Ra) * (da / r.Ra));
-            if (q < 1) {
-              const I = Math.pow(1 - q, 1.28);
-              rem *= 1 - clamp(I * spillAmt);
-            }
-          }
-          let I = 1 - rem;
-          // tiny noise to kill banding on the long smooth gradients
-          I = clamp(I + (hash(i * 7.31 + j * 13.17) - 0.5) / 255);
-          const idx = ((I * 255) | 0) * 4;
-          const o = (j * lw + i) * 4;
-          data[o] = ramp[idx];
-          data[o + 1] = ramp[idx + 1];
-          data[o + 2] = ramp[idx + 2];
-          data[o + 3] = ramp[idx + 3];
-        }
-      }
-      octx.putImageData(s.img, 0, 0);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(s.off, 0, 0, W, H);
-    }
-
-    /* ── tubes ── */
-    const tint = (a: number) => `rgba(${tubeRGB[0] | 0},${tubeRGB[1] | 0},${tubeRGB[2] | 0},${clamp(a)})`;
-    const lightTint = (a: number) => `rgba(${lightRGB[0] | 0},${lightRGB[1] | 0},${lightRGB[2] | 0},${clamp(a)})`;
-    const toXY = (t: Tube, a: number): [number, number] => (t.vertical ? [t.pos, H - a] : [a, t.pos]);
-
-    for (const t of tubes) {
-      ctx.lineCap = "round";
-      ctx.globalCompositeOperation = "source-over";
-      ctx.shadowBlur = 0;
-
-      // faint hairline outline of the (unlit) tube
-      {
-        const [x0, y0] = toXY(t, t.t0);
-        const [x1, y1] = toXY(t, t.t1);
-        ctx.strokeStyle = "rgba(255,255,255,0.14)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
-        ctx.stroke();
-      }
-
-      if (tubeLevel <= 0.003) continue;
-      const lit = (P.intensity ?? 1) * tubeLevel;
-      const [x0, y0] = toXY(t, t.lo);
-      const [x1, y1] = toXY(t, t.hi);
-      const dot = t.hi - t.lo < 0.5;
-
-      ctx.globalCompositeOperation = "lighter";
-
-      // wide soft halo (light colour)
-      ctx.shadowColor = lightTint(0.9);
-      ctx.shadowBlur = (16 + 34 * gl) * dprNow * lit;
-      ctx.strokeStyle = lightTint(0.35 * gl * lit);
-      ctx.lineWidth = thick + 4 * gl;
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1 + (dot ? 0.01 : 0), y1);
-      ctx.stroke();
-
-      // tube body (tube colour) with tight glow
-      ctx.shadowColor = tint(1);
-      ctx.shadowBlur = (6 + 12 * gl) * dprNow * lit;
-      ctx.strokeStyle = tint(0.95 * lit);
-      ctx.lineWidth = dot ? thick * 1.6 : thick;
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1 + (dot ? 0.01 : 0), y1);
-      ctx.stroke();
-
-      // hot core
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = `rgba(255,250,240,${clamp(0.85 * lit)})`;
-      ctx.lineWidth = Math.max(1, thick * 0.38);
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1 + (dot ? 0.01 : 0), y1);
-      ctx.stroke();
-    }
-    ctx.globalCompositeOperation = "source-over";
-    ctx.shadowBlur = 0;
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   };
 
-  /* ── loop ── */
+  /* ── Animation Loop ── */
   const loop = (now: number) => {
     const s = S.current;
     s.raf = 0;
@@ -530,16 +568,23 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     if (s.visible && !propsRef.current.paused) s.raf = requestAnimationFrame(loop);
     else s.last = 0;
   };
+
   function wake() {
     const s = S.current;
     if (!s.raf) s.raf = requestAnimationFrame(loop);
   }
 
-  /* ── sizing ── */
+  /* ── Resize & Initialization ── */
   useEffect(() => {
     const root = rootRef.current;
     const canvas = canvasRef.current;
     if (!root || !canvas) return;
+
+    if (!initGL(canvas)) {
+      console.warn("NeonReveal: WebGL2 context initialization failed");
+      return;
+    }
+
     const resize = () => {
       const r = root.getBoundingClientRect();
       const d = Math.min(window.devicePixelRatio || 1, propsRef.current.dpr ?? 2);
@@ -551,23 +596,23 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
       canvas.height = Math.round(s.h * d);
       canvas.style.width = `${s.w}px`;
       canvas.style.height = `${s.h}px`;
-      s.off = null;
-      s.img = null;
       draw(0);
       wake();
     };
+
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(root);
+    const state = S.current;
     return () => {
       ro.disconnect();
-      cancelAnimationFrame(S.current.raf);
-      S.current.raf = 0;
+      cancelAnimationFrame(state.raf);
+      state.raf = 0;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ── trigger ── */
+  /* ── Triggers ── */
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
@@ -592,11 +637,10 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
       io.observe(root);
       return () => io.disconnect();
     }
-    // manual: waits for replay() or click
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger, scrollThreshold]);
 
-  /* pause the loop when scrolled away (mount/manual triggers) */
+  /* Pause loop when scrolled offscreen */
   useEffect(() => {
     const root = rootRef.current;
     if (!root || trigger === "inView") return;
@@ -606,23 +650,24 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     });
     io.observe(root);
     return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger]);
 
-  /* re-render once when paused toggles or visual props change */
+  /* Re-render when props change */
   useEffect(() => {
     draw(0);
     wake();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused, colors[0], colors[1], backgroundColor, direction, mirrored, thickness, glow, spill, reach, intensity, feather, inset, length, hum, expandFrom]);
+  }, [paused, colors[0], colors[1], backgroundColor, direction, mirrored, glow, spill, reach, inset, length, hum]);
 
-  /* ── click to re-ignite ── */
+  /* ── Click interaction ── */
   const onClick = (e: React.MouseEvent) => {
     if (!interactive) return;
     const target = e.target as HTMLElement;
     if (target.closest("a,button,input,textarea,select,summary,[role='button'],[role='link']")) return;
     const s = S.current;
     if (s.phase === "run" && !s.done) {
-      s.kick = s.clock; // mid-reveal: just make it stutter
+      s.kick = s.clock;
       wake();
     } else if (s.phase === "off") {
       play();
@@ -646,7 +691,16 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
         ...style,
       }}
     >
-      <canvas ref={canvasRef} aria-hidden="true" style={{ position: "absolute", inset: 0, display: "block", pointerEvents: "none" }} />
+      <canvas
+        ref={canvasRef}
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "block",
+          pointerEvents: "none",
+        }}
+      />
       {children !== undefined && (
         <div
           style={{
@@ -657,7 +711,6 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            // matches the reference: dark content is only readable where the light reaches
             color: "#000",
           }}
         >
