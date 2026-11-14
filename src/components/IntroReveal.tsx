@@ -6,8 +6,9 @@ import { CustomEase } from "gsap/CustomEase";
 import { SplitText } from "gsap/SplitText";
 import { useIntro } from "@/context/IntroContext";
 import { useTheme } from "@/components/ThemeProvider";
-import { IntroHeroSvg } from "./IntroHeroSvg";
+// import { IntroHeroSvg } from "./IntroHeroSvg";
 import { useHeroScroll } from "./useHeroScroll";
+import NeonReveal, { type NeonRevealHandle } from "@/components/NeonReveal";
 import HalftoneReveal, { type HalftoneRevealHandle } from "@/components/HalftoneReveal/HalftoneReveal";
 import "./IntroReveal.css";
 
@@ -17,6 +18,7 @@ export function IntroReveal() {
   const containerRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const halftoneRef = useRef<HalftoneRevealHandle>(null);
+  const neonRef = useRef<NeonRevealHandle>(null);
   const { introDone, setIntroDone, shouldRunIntro } = useIntro();
   const [isFinished, setIsFinished] = useState(() => {
     if (typeof window !== "undefined" && window.location.search.includes("test_intro=1")) {
@@ -24,6 +26,7 @@ export function IntroReveal() {
     }
     return introDone || !shouldRunIntro;
   });
+  const [neonAutoPlay] = useState(isFinished);
 
   const { resolvedTheme } = useTheme();
 
@@ -414,10 +417,14 @@ export function IntroReveal() {
             6
           )
           .to(
-            [".container .card", ".container .hero-shapes-wrapper"],
+            // [".container .card", ".container .hero-shapes-wrapper"],
+            [".container .card"],
             {
               clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
               duration: 0.75,
+              onStart: () => {
+                neonRef.current?.replay();
+              },
               onComplete: () => {
                 halftoneRef.current?.startIntro(true);
               },
@@ -529,9 +536,19 @@ export function IntroReveal() {
       {/* Hero View: revealed by the preloader, then remains as the top hero section */}
       <div className="container w-full max-w-none m-0">
         <div className="hero-img">
-          <div className="hero-shapes-wrapper">
-            <IntroHeroSvg />
-          </div>
+          {/* <div className="hero-shapes-wrapper"><IntroHeroSvg /></div> */}
+          <NeonReveal
+            ref={neonRef}
+            trigger={neonAutoPlay ? "mount" : "manual"}
+            colors={["#FFD3A8", "#FF4D6D"]}
+            direction="right"
+            revealDuration={2600}
+            glow={0.8}
+            mirrored
+            hum={0.8}
+            flicker={0.75}
+            backgroundColor="#000000"
+          />
         </div>
 
         <div className="card" ref={cardRef}>
