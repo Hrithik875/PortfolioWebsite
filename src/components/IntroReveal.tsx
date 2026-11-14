@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import gsap from "gsap";
 import { CustomEase } from "gsap/CustomEase";
 import { SplitText } from "gsap/SplitText";
@@ -10,6 +10,8 @@ import { IntroHeroSvg } from "./IntroHeroSvg";
 import { useHeroScroll } from "./useHeroScroll";
 import HalftoneReveal, { type HalftoneRevealHandle } from "@/components/HalftoneReveal/HalftoneReveal";
 import "./IntroReveal.css";
+
+const emptySubscribe = () => () => {};
 
 export function IntroReveal() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -24,35 +26,33 @@ export function IntroReveal() {
   });
 
   const { resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState<string>("dark");
 
-  useEffect(() => {
-    setMounted(true);
-    const getTheme = () => {
-      const docTheme =
-        typeof document !== "undefined"
-          ? document.documentElement.getAttribute("data-theme")
-          : null;
-      return docTheme || resolvedTheme || "dark";
-    };
-    setCurrentTheme(getTheme());
+  const isHydrated = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
 
-    if (typeof document !== "undefined") {
-      const observer = new MutationObserver(() => {
-        setCurrentTheme(getTheme());
-      });
-
+  const currentTheme = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof document === "undefined") return () => {};
+      const observer = new MutationObserver(onStoreChange);
       observer.observe(document.documentElement, {
         attributes: true,
         attributeFilter: ["data-theme"],
       });
-
       return () => observer.disconnect();
-    }
-  }, [resolvedTheme]);
+    },
+    () => {
+      if (typeof document !== "undefined") {
+        return document.documentElement.getAttribute("data-theme") || resolvedTheme || "dark";
+      }
+      return "dark";
+    },
+    () => "dark"
+  );
 
-  const isLight = mounted && currentTheme === "light";
+  const isLight = isHydrated && currentTheme === "light";
   const paperColor = isLight ? "#f4f4f4" : "#0a0a0a";
 
   useEffect(() => {
@@ -61,13 +61,15 @@ export function IntroReveal() {
 
     // If intro is not supposed to run or is already done, mark finished immediately
     if (!isTestMode && (introDone || !shouldRunIntro || isFinished)) {
-      setIsFinished(true);
+      if (!isFinished) {
+        queueMicrotask(() => setIsFinished(true));
+      }
       return;
     }
 
     // In test mode, if isFinished was true, reset it to re-mount the preloader
     if (isTestMode && isFinished) {
-      setIsFinished(false);
+      queueMicrotask(() => setIsFinished(false));
       return;
     }
 
@@ -77,8 +79,10 @@ export function IntroReveal() {
       window.matchMedia &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
-      setIntroDone(true);
-      setIsFinished(true);
+      queueMicrotask(() => {
+        setIntroDone(true);
+        setIsFinished(true);
+      });
       halftoneRef.current?.startIntro();
       return;
     }
@@ -274,13 +278,14 @@ export function IntroReveal() {
         const tl = gsap.timeline({
           defaults: { ease: "hop" },
           onComplete: () => {
+            if (typeof window !== "undefined") {
+              window.scrollTo(0, 0);
+              document.documentElement.scrollTop = 0;
+              document.body.scrollTop = 0;
+            }
             // Unmount preloader, unlock scroll, notify app
             setIsFinished(true);
             setIntroDone(true);
-            halftoneRef.current?.startIntro();
-            if (typeof window !== "undefined") {
-              window.scrollTo(0, 0);
-            }
           },
         });
 
@@ -363,10 +368,10 @@ export function IntroReveal() {
               force3D: true,
               onComplete: () => {
                 gsap.set(".preloader", {
-                  clipPath: "polygon(0 0, 100% 0, 100% 50%, 0 50%)",
+                  clipPath: "polygon(0% 0%, 100% 0%, 100% 50%, 0% 50%)",
                 });
                 gsap.set(".split-overlay", {
-                  clipPath: "polygon(0 50%, 100% 50%, 100% 100%, 0 100%)",
+                  clipPath: "polygon(0% 50%, 100% 50%, 100% 100%, 0% 100%)",
                 });
               },
             },
@@ -454,12 +459,13 @@ export function IntroReveal() {
       }, containerRef);
     };
 
+    const container = containerRef.current;
     runTimeline();
 
     return () => {
       isCancelled = true;
-      if (containerRef.current) {
-        containerRef.current.classList.remove("is-ready");
+      if (container) {
+        container.classList.remove("is-ready");
       }
       if (ctx) {
         ctx.revert();

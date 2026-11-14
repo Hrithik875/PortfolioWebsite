@@ -581,8 +581,14 @@ const HalftoneReveal = forwardRef(({
       state.width = width;
       state.height = height;
       state.dpr = dpr;
-      canvas.width = Math.max(1, Math.round(width * dpr));
-      canvas.height = Math.max(1, Math.round(height * dpr));
+      const targetW = Math.max(1, Math.round(width * dpr));
+      const targetH = Math.max(1, Math.round(height * dpr));
+      let canvasResized = false;
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+        canvasResized = true;
+      }
       const mw = Math.max(2, Math.round(width * MASK_SCALE));
       const mh = Math.max(2, Math.round(height * MASK_SCALE));
       if (mw !== masks[0].width || mh !== masks[0].height) {
@@ -592,6 +598,9 @@ const HalftoneReveal = forwardRef(({
       if (!pointer.placed) {
         pointer.x = width / 2;
         pointer.y = height / 2;
+      }
+      if (canvasResized && state.image) {
+        drawView(settingsRef.current, performance.now());
       }
       wake();
     };
@@ -729,7 +738,7 @@ const HalftoneReveal = forwardRef(({
 
     const triggerIntro = (force = false) => {
       state.shouldPlayIntro = true;
-      if (force || !state.introStarted) {
+      if (state.image && (force || !state.introStarted)) {
         state.introStarted = true;
         state.introStart = performance.now();
         wake();
@@ -759,7 +768,9 @@ const HalftoneReveal = forwardRef(({
       }
       state.image = image;
       if (state.shouldPlayIntro || settingsRef.current.playIntro) {
-        triggerIntro();
+        state.introStarted = true;
+        state.introStart = performance.now();
+        wake();
       } else {
         drawView(settingsRef.current, performance.now());
       }
