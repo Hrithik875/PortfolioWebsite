@@ -96,7 +96,18 @@ export function useHeroScroll(
     };
 
     /* ── state ── */
-    const readTarget = () => clamp01(Math.max(0, window.scrollY) / (heroH * SCROLL_RANGE));
+    const isIntroActive = () => {
+      if (typeof document === "undefined") return false;
+      return (
+        document.documentElement.classList.contains("intro-loading") ||
+        document.querySelector(".intro-reveal.is-animating") !== null
+      );
+    };
+
+    const readTarget = () => {
+      if (isIntroActive()) return 0;
+      return clamp01(Math.max(0, window.scrollY) / (heroH * SCROLL_RANGE));
+    };
 
     let p = 0; // smoothed progress
     let target = 0; // raw progress from scroll
@@ -227,7 +238,7 @@ export function useHeroScroll(
     if (ready) snap();
 
     const onScroll = () => {
-      if (ready) wake();
+      if (ready && !isIntroActive()) wake();
     };
     const onResize = () => {
       const wasReady = ready;

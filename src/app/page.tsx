@@ -53,6 +53,8 @@ export default function HomePage() {
       }, 100);
     } else {
       window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
     }
     if ("scrollRestoration" in window.history) {
       window.history.scrollRestoration = "manual";

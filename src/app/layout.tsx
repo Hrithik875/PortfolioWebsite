@@ -6,7 +6,6 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { IntroProvider } from "@/context/IntroContext";
 import { LenisProvider } from "@/components/LenisProvider";
 import { Navbar } from "@/components/Navbar";
-import { GlobalBackgroundLoader } from "@/components/GlobalBackgroundLoader";
 import { Footer } from "@/components/Footer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PreventZoom } from "@/components/PreventZoom";
@@ -77,6 +76,25 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
+              // Disable automatic scroll restoration so refreshed pages boot at the top without snapping
+              try {
+                if ('scrollRestoration' in history) {
+                  history.scrollRestoration = 'manual';
+                }
+                window.scrollTo(0, 0);
+              } catch(e) {}
+
+              try {
+                window.addEventListener('beforeunload', function() {
+                  try {
+                    if ('scrollRestoration' in history) {
+                      history.scrollRestoration = 'manual';
+                    }
+                    window.scrollTo(0, 0);
+                  } catch(e) {}
+                });
+              } catch(e) {}
+
               try {
                 if (
                   window.location.pathname !== '/' ||
