@@ -9,6 +9,8 @@
  *  - Light spread: each tube throws a fan beam. Its vertical profile is the tube
  *    blurred by a Gaussian whose width grows with distance, with a ~1/distance
  *    falloff. That produces the lens-shaped lobes that converge on the tube tips.
+ *  - Behind the tube: a dimmer reflection of the same light that fades smoothly,
+ *    so front and back blend across the tube with no hard edge.
  *  - Tube: white-hot core, yellow rim, long amber aura (a pure radial profile),
  *    and a faint warm-gray glass hairline while the tube is off.
  *  - Choreography (measured): cut (~220ms) → dark hold → 30px spark that flickers
@@ -286,6 +288,8 @@ const float B_EX = 3.2038;
 const float B_GAM = 0.8054;
 const float B_ABR = 0.9569;
 const float B_LA = -2.3103;
+const float BACK_GAIN = 0.55;  // brightness right behind the tube (relative to the front)
+const float BACK_FALL = 34.0;  // fade distance behind the tube (reference px)
 
 float beamI(float dx, float yp, float hh) {
   dx = max(dx, 0.0);
@@ -318,6 +322,13 @@ void main() {
   if (u_level > 0.0005 && hhLit > 0.5) {
     if (u_left  > 0.5) Itot += beamI(xl / (u_sc * u_reach), ypn, hhn) * smoothstep(2.5, 6.0, xl);
     if (u_right > 0.5) Itot += beamI(xr / (u_sc * u_reach), ypn, hhn) * smoothstep(2.5, 6.0, xr);
+    // light behind the tube: the same light, dimmer, fading smoothly with distance,
+    // so front and back blend across the tube instead of meeting at a hard edge
+    float bl = 0.0;
+    float nearI = beamI(6.0 / u_reach, ypn, hhn);
+    if (u_left  > 0.5 && xl < 0.0) bl += nearI * exp(-(-xl) / (BACK_FALL * u_sc)) * smoothstep(-1.0, 3.0, -xl);
+    if (u_right > 0.5 && xr < 0.0) bl += nearI * exp(-(-xr) / (BACK_FALL * u_sc)) * smoothstep(-1.0, 3.0, -xr);
+    Itot += bl * BACK_GAIN;
   }
   float lI = log2(max(Itot, 1e-9)) * 0.30102999566 + B_LA * 0.4342944819 + u_beam
            + log2(max(u_level, 1e-6)) * 0.30102999566;
@@ -389,7 +400,7 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     spill = 1,
     reach = 1,
     intensity = 1,
-    inset = 30,
+    inset = 3, // tube axis from the edge: the tube sits flush in the corner
     length = 0.904,
     mirrored = true,
     hum = 1,
@@ -759,14 +770,12 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
   }, [trigger]);
 
   /* Re-render when props change */
-  const c0 = colors[0];
-  const c1 = colors[1];
   useEffect(() => {
     draw(0);
     wake();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    props.paused, c0, c1, backgroundColor, direction, mirrored,
+    props.paused, colors[0], colors[1], backgroundColor, direction, mirrored,
     glow, spill, reach, intensity, inset, length, hum,
   ]);
 

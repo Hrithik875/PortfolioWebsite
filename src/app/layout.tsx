@@ -76,6 +76,19 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
+              // Suppress known Next.js 16.2.0 internal OuterLayoutRouter unkeyed array warning in dev
+              try {
+                var _origErr = console.error;
+                console.error = function() {
+                  var args = Array.prototype.slice.call(arguments);
+                  var full = args.map(function(a) { return typeof a === 'string' ? a : ''; }).join(' ');
+                  if (full.indexOf('unique') !== -1 && full.indexOf('key') !== -1 && (full.indexOf('OuterLayoutRouter') !== -1 || full.indexOf('SegmentStateProvider') !== -1)) {
+                    return;
+                  }
+                  return _origErr.apply(console, args);
+                };
+              } catch(e) {}
+
               // Disable automatic scroll restoration so refreshed pages boot at the top without snapping
               try {
                 if ('scrollRestoration' in history) {
