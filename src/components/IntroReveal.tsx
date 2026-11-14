@@ -490,7 +490,6 @@ export function IntroReveal() {
           <NeonReveal
             ref={neonRef}
             trigger={neonAutoPlay ? "mount" : "manual"}
-            colors={["#FFD3A8", "#FF4D6D"]}
             direction="right"
             revealDuration={2600}
             glow={0.8}
