@@ -1,5 +1,6 @@
 import React from "react";
 
 export default function Template({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return <div style={{ display: "contents" }}>{children}</div>;
 }
+
