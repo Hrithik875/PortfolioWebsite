@@ -55,6 +55,7 @@ export interface NeonRevealProps {
   mirrored?: boolean;
   hum?: number;
   flicker?: number;
+  cornerBlur?: number;
   interactive?: boolean;
   intro?: boolean;
   paused?: boolean;
@@ -315,6 +316,29 @@ void main() {
   float xl = p.x - u_inset;               // inward distance from left tube
   float xr = (u_res.x - u_inset) - p.x;   // inward distance from right tube
 
+  // ---- corner feather: smooth fade near the top/bottom AND left/right edges ----
+  // The vertical fade rolls off over the outer 18% of the half-height.
+  // The horizontal (corner-only) fade rolls off over the outer 20% of inset
+  // so only the tight corner region is blended, not the whole tube reach.
+  float fadeRange = u_cornerBlur * 0.22;  // fraction of half-height used as fade band
+  float halfH = u_res.y * 0.5;
+  float topDist  = p.y / halfH;                       // 0 at top, 1 at centre
+  float botDist  = (u_res.y - p.y) / halfH;           // 0 at bottom, 1 at centre
+  float vFade = smoothstep(0.0, fadeRange, min(topDist, botDist));
+
+  // horizontal corner fade: only squeeze near the wall-side corners
+  float leftDist  = clamp(xl / (u_inset * 1.5 + 1.0), 0.0, 1.0);
+  float rightDist = clamp(xr / (u_inset * 1.5 + 1.0), 0.0, 1.0);
+  // corner mask: 1 at centre/far, 0 at the tube-tip corners
+  // We only want to fade where both vertical AND horizontal are close to edge
+  float lCorner = smoothstep(0.0, fadeRange * 0.7, min(topDist, botDist)) +
+                  smoothstep(0.0, 0.5, leftDist);
+  float rCorner = smoothstep(0.0, fadeRange * 0.7, min(topDist, botDist)) +
+                  smoothstep(0.0, 0.5, rightDist);
+  float hFade = clamp(min(lCorner, rCorner) * 0.5, 0.0, 1.0);
+
+  float cornerFade = mix(1.0, min(vFade, mix(1.0, hFade, 0.5)), u_cornerBlur);
+
   // beam intensity (sum of both tubes) in reference px
   float Itot = 0.0;
   float hhn = hhLit / u_sc;
@@ -330,6 +354,10 @@ void main() {
     if (u_right > 0.5 && xr < 0.0) bl += nearI * exp(-(-xr) / (BACK_FALL * u_sc)) * smoothstep(-1.0, 3.0, -xr);
     Itot += bl * BACK_GAIN;
   }
+
+  // Apply corner fade to beam intensity before the ramp lookup
+  Itot *= cornerFade;
+
   float lI = log2(max(Itot, 1e-9)) * 0.30102999566 + B_LA * 0.4342944819 + u_beam
            + log2(max(u_level, 1e-6)) * 0.30102999566;
   vec3 col = (Itot > 1e-9) ? ramp(lI) : vec3(0.0);
@@ -349,7 +377,7 @@ void main() {
     float overF = max(0.0, ay - hhFull);
     float endF = 1.0 - smoothstep(0.0, 2.0, overF);
     float gl = exp(-dxa * dxa / (2.0 * 1.8 * 1.8)) * endF;
-    col = max(col, vec3(59.0, 50.0, 46.0) / 255.0 * 1.04 * gl * u_hair);
+    col = max(col, vec3(59.0, 50.0, 46.0) / 255.0 * 1.04 * gl * u_hair * cornerFade);
 
     if (u_level > 0.0005 && hhLit > 0.5) {
       // lit tube: core inside segment, aura outside/around
@@ -360,7 +388,9 @@ void main() {
       float auraMask = smoothstep(3.0, 6.0, dLookup);
       tc *= mix(1.0, u_glow, auraMask);
       tc = levelScale(tc, u_level);
-      col = max(col, tc);
+      // fade the tube tip glow at the corners; use a softer fade for the core (dLookup < 6)
+      float tipFade = mix(cornerFade, 1.0, smoothstep(0.0, 6.0, dLookup) * (1.0 - cornerFade));
+      col = max(col, tc * tipFade);
     }
   }
 
@@ -387,7 +417,7 @@ const FLICKER_STEP_MS = 64;
 type Phase = "off" | "run" | "cut";
 const UNIFORMS = [
   "u_res", "u_dpr", "u_inset", "u_yc", "u_full", "u_lit", "u_level", "u_sc",
-  "u_left", "u_right", "u_glow", "u_beam", "u_reach", "u_hair", "u_bg", "u_cmat",
+  "u_left", "u_right", "u_glow", "u_beam", "u_reach", "u_hair", "u_cornerBlur", "u_bg", "u_cmat",
 ] as const;
 
 export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function NeonReveal(props, ref) {
@@ -660,6 +690,7 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     );
     gl.uniform1f(u.u_reach, clamp(P.reach ?? reach, 0.1, 3));
     gl.uniform1f(u.u_hair, 1);
+    gl.uniform1f(u.u_cornerBlur, clamp(P.cornerBlur ?? 1, 0, 1));
     gl.uniform3f(u.u_bg, bgRGB[0], bgRGB[1], bgRGB[2]);
     gl.uniformMatrix3fv(u.u_cmat, false, paletteMatrix(tubeRGB, lightRGB));
 

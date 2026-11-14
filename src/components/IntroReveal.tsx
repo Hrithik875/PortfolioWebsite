@@ -497,6 +497,7 @@ export function IntroReveal() {
             mirrored
             hum={0.8}
             flicker={0.75}
+            cornerBlur={1}
             backgroundColor="#000000"
           />
         </div>
