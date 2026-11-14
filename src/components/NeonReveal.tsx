@@ -51,7 +51,7 @@ export interface NeonRevealProps {
   intensity?: number;
   feather?: number;
   inset?: number;
-  length?: number;
+  length?: number | { mobile?: number; desktop?: number };
   mirrored?: boolean;
   hum?: number;
   flicker?: number;
@@ -424,15 +424,15 @@ const UNIFORMS = [
 export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function NeonReveal(props, ref) {
   const {
     colors = ["#FFD3A8", "#FF4D6D"],
-    backgroundColor = "#000000",
+    backgroundColor = "#000000ff",
     direction = "right",
     trigger = "mount",
     glow = 1,
     spill = 1,
-    reach = 1,
+    reach = 0.85,
     intensity = 1,
-    inset = 3, // tube axis from the edge: the tube sits flush in the corner
-    length = 0.904,
+    inset = 1, // tube axis from the edge: the tube sits flush in the corner
+    length,
     mirrored = true,
     hum = 1,
     interactive = true,
@@ -572,7 +572,20 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     const ease = EASE[P.easing ?? "out"] ?? EASE.out;
     const flickerAmt = clamp(P.flicker ?? 1);
 
-    const fullLen = s.h * clamp(P.length ?? length, 0.1, 1);
+    const isSmallDevice = (s.w > 0 ? s.w : (typeof window !== "undefined" ? window.innerWidth : 1200)) < 1024;
+    const defaultLen = isSmallDevice ? 0.7 : 0.9;
+    let targetLen = defaultLen;
+    if (typeof P.length === "number") {
+      targetLen = P.length;
+    } else if (typeof P.length === "object" && P.length !== null) {
+      targetLen = (isSmallDevice ? P.length.mobile : P.length.desktop) ?? defaultLen;
+    } else if (typeof length === "number") {
+      targetLen = length;
+    } else if (typeof length === "object" && length !== null) {
+      targetLen = (isSmallDevice ? (length as { mobile?: number; desktop?: number }).mobile : (length as { mobile?: number; desktop?: number }).desktop) ?? defaultLen;
+    }
+
+    const fullLen = s.h * clamp(targetLen, 0.1, 1);
     const sparkLen = Math.min(SPARK_PX, fullLen);
 
     // targets for this frame
@@ -808,7 +821,9 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     props.paused, colors[0], colors[1], backgroundColor, direction, mirrored,
-    glow, spill, reach, intensity, inset, length, hum,
+    glow, spill, reach, intensity, inset,
+    typeof length === "object" ? JSON.stringify(length) : length,
+    hum,
   ]);
 
   /* ── Click: stutter during the reveal, otherwise cut and re-ignite ── */
