@@ -68,7 +68,7 @@ export function Footer() {
   };
 
   return (
-    <footer className="w-full relative z-[1] bg-transparent border-t border-[color:var(--border)] overflow-hidden flex flex-col justify-between">
+    <footer className="w-full relative z-[1] bg-[rgb(var(--about-rgb))] overflow-hidden flex flex-col justify-between">
       {/* Top Content Section */}
       <div className="w-full px-6 md:px-16 pt-24 md:pt-32">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 md:gap-16 mb-20 md:mb-32">

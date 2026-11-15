@@ -77,13 +77,13 @@ export default function HomePage() {
       {/* ── About section (full viewport width scroll-scrubbed replica) ─ */}
       <About />
 
-      {/* Next section slides up over the tail of the portrait (~35vh overlap) */}
+      {/* Skills flows on seamlessly — same background as About, no visible seam */}
       <div
         className="w-full relative z-[12]"
         style={{
           marginTop: "-35vh",
           background: "rgb(var(--about-rgb))",
-          paddingTop: "15vh",
+          paddingTop: "10vh",
         }}
       >
         <div className="w-full pb-20 z-20">

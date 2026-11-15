@@ -53,7 +53,7 @@ export const T = {
 
   // — About sliding over the hero —
   coverSpeed: 0.7,     // extra speed of the About background vs the page (0.7 = 1.7× page speed)
-  featherVh: 35,       // height of the blurred, fading edge that sits above About (vh)
+  featherVh: 50,       // height of the blurred, fading edge that sits above About (vh) — increased for smoother hero→about blend
 
   nextOverlapVh: 35,   // MUST equal the next section's negative marginTop in page.tsx (-35vh)
 
