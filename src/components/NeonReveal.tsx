@@ -273,6 +273,7 @@ vec3 tubeProfile(float d) {
 float erf_(float x) {
   float s = x < 0.0 ? -1.0 : 1.0;
   x = abs(x);
+  if (x >= 3.5) return s;
   float t = 1.0 / (1.0 + 0.3275911 * x);
   float y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * exp(-x * x);
   return s * y;
@@ -283,6 +284,8 @@ float erf_(float x) {
 const float B_D0 = 83.4124;
 const float B_S  = 1.0954;
 const float B_KAP = 0.5902;
+const float B_KAP_60 = 1.308681; // precomputed: B_KAP * pow(60.0, 1.0 - B_GAM)
+const float INV_SQRT2 = 0.70710678; // precomputed: 1.0 / 1.41421356
 const float B_SIG0 = 11.5536;
 const float B_SIG1 = 0.0823;
 const float B_G = -0.1322;
@@ -295,10 +298,12 @@ const float BACK_FALL = 34.0;  // fade distance behind the tube (reference px)
 
 float beamI(float dx, float yp, float hh) {
   dx = max(dx, 0.0);
-  float sig = B_KAP * pow(dx + 1.0, B_GAM) * pow(60.0, 1.0 - B_GAM) + B_SIG0 + B_SIG1 * hh;
-  float P = 0.5 * (erf_((hh - yp) / (1.41421356 * sig)) + erf_((hh + yp) / (1.41421356 * sig)));
+  float sig = B_KAP_60 * pow(dx + 1.0, B_GAM) + B_SIG0 + B_SIG1 * hh;
+  float invSig = INV_SQRT2 / sig;
+  float P = 0.5 * (erf_((hh - yp) * invSig) + erf_((hh + yp) * invSig));
+  if (P <= 0.0) return 0.0;
   float A = pow(1.0 + pow(dx / B_D0, B_ABR), -B_S / B_ABR) * pow(hh / 200.0, B_G);
-  return A * pow(max(P, 0.0), B_EX);
+  return A * pow(P, B_EX);
 }
 
 vec3 levelScale(vec3 c, float l) {
@@ -466,6 +471,12 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     buffer: null as WebGLBuffer | null,
     vao: null as WebGLVertexArrayObject | null,
     uniforms: {} as Record<string, WebGLUniformLocation | null>,
+    cachedColorsKey: "",
+    cachedTubeRGB: [0, 0, 0] as RGB,
+    cachedLightRGB: [0, 0, 0] as RGB,
+    cachedBgKey: "",
+    cachedBgRGB: [0, 0, 0] as RGB,
+    cachedCmat: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]) as ReturnType<typeof paletteMatrix>,
   });
 
   const reduced = () =>
@@ -563,9 +574,20 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     if (!P.paused) s.clock += dtMs;
 
     const cols = P.colors ?? colors;
-    const tubeRGB = parseColorToUnit(cols[0]);
-    const lightRGB = parseColorToUnit(cols[1]);
-    const bgRGB = parseColorToUnit(P.backgroundColor ?? backgroundColor);
+    const colKey = `${cols[0]}|${cols[1]}`;
+    if (colKey !== s.cachedColorsKey) {
+      s.cachedColorsKey = colKey;
+      s.cachedTubeRGB = parseColorToUnit(cols[0]);
+      s.cachedLightRGB = parseColorToUnit(cols[1]);
+      s.cachedCmat = paletteMatrix(s.cachedTubeRGB, s.cachedLightRGB);
+    }
+    const bgKey = P.backgroundColor ?? backgroundColor;
+    if (bgKey !== s.cachedBgKey) {
+      s.cachedBgKey = bgKey;
+      s.cachedBgRGB = parseColorToUnit(bgKey);
+    }
+    const tubeRGB = s.cachedTubeRGB;
+    const bgRGB = s.cachedBgRGB;
 
     const D = P.revealDelay ?? 0;
     const T = Math.max(50, P.revealDuration ?? 2600);
@@ -706,7 +728,7 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     gl.uniform1f(u.u_hair, 1);
     gl.uniform1f(u.u_cornerBlur, clamp(P.cornerBlur ?? 1, 0, 1));
     gl.uniform3f(u.u_bg, bgRGB[0], bgRGB[1], bgRGB[2]);
-    gl.uniformMatrix3fv(u.u_cmat, false, paletteMatrix(tubeRGB, lightRGB));
+    gl.uniformMatrix3fv(u.u_cmat, false, s.cachedCmat);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   };
@@ -715,11 +737,21 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
   const loop = (now: number) => {
     const s = S.current;
     s.raf = 0;
-    const dt = s.last ? Math.min(64, now - s.last) : 16;
+    if (!s.visible || (typeof document !== "undefined" && document.hidden) || propsRef.current.paused) {
+      s.last = 0;
+      return;
+    }
+    const isAnimating = (s.phase === "run" && !s.done) || s.phase === "cut" || (s.clock - s.kick < 420);
+    const minInterval = isAnimating ? 0 : 28; // ~35 FPS during steady state, full 60/120Hz during active reveal & click
+    const elapsed = s.last ? now - s.last : 16;
+    if (minInterval > 0 && elapsed < minInterval) {
+      s.raf = requestAnimationFrame(loop);
+      return;
+    }
     s.last = now;
+    const dt = Math.min(64, elapsed);
     draw(dt);
-    if (s.visible && !propsRef.current.paused) s.raf = requestAnimationFrame(loop);
-    else s.last = 0;
+    s.raf = requestAnimationFrame(loop);
   };
 
   function wake() {
@@ -740,7 +772,7 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
 
     const resize = () => {
       const r = root.getBoundingClientRect();
-      const d = Math.min(window.devicePixelRatio || 1, propsRef.current.dpr ?? 2);
+      const d = Math.min(window.devicePixelRatio || 1, propsRef.current.dpr ?? 1);
       const s = S.current;
       s.w = Math.max(1, r.width);
       s.h = Math.max(1, r.height);
@@ -756,8 +788,23 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(root);
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (state.raf) {
+          cancelAnimationFrame(state.raf);
+          state.raf = 0;
+        }
+      } else if (state.visible) {
+        state.last = 0;
+        wake();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     const state = S.current;
     return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
       ro.disconnect();
       cancelAnimationFrame(state.raf);
       state.raf = 0;
@@ -807,7 +854,13 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     if (!root || trigger === "inView") return;
     const io = new IntersectionObserver(([e]) => {
       S.current.visible = e.isIntersecting;
-      if (e.isIntersecting) wake();
+      if (e.isIntersecting) {
+        S.current.last = 0;
+        wake();
+      } else if (S.current.raf) {
+        cancelAnimationFrame(S.current.raf);
+        S.current.raf = 0;
+      }
     });
     io.observe(root);
     return () => io.disconnect();

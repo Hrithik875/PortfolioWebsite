@@ -577,7 +577,7 @@ const HalftoneReveal = forwardRef(({
     const resize = () => {
       const width = Math.max(1, container.clientWidth);
       const height = Math.max(1, container.clientHeight);
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       state.width = width;
       state.height = height;
       state.dpr = dpr;
@@ -819,6 +819,9 @@ const HalftoneReveal = forwardRef(({
       if (visible) {
         last = 0;
         wake();
+      } else if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
       }
     });
     intersection.observe(container);
@@ -862,7 +865,11 @@ const HalftoneReveal = forwardRef(({
 
   useEffect(() => {
     wakeRef.current?.();
-  });
+  }, [
+    fit, mode, shape, cellSize, angle, dotScale, inkColor, accentColor, paperColor,
+    contrast, brightness, invert, roughness, misregistration, revealRadius,
+    softness, linger, reverse, wander, clickBurst
+  ]);
 
   return (
     <div
