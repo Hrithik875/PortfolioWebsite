@@ -680,6 +680,12 @@ const HalftoneReveal = forwardRef(({
       raf = 0;
       if (!alive || !visible || document.hidden) return;
       const s = settingsRef.current;
+      // Cap at 60 FPS (16 ms) — avoids overloading the GPU when two WebGL
+      // canvases (NeonReveal + HalftoneReveal) animate simultaneously.
+      if (last && (now - last) < 16) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
       const dt = last ? Math.min(0.05, Math.max(0, (now - last) / 1000)) : 1 / 60;
       last = now;
 

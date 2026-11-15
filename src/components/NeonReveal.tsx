@@ -741,8 +741,12 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
       s.last = 0;
       return;
     }
-    const isAnimating = (s.phase === "run" && !s.done) || s.phase === "cut" || (s.clock - s.kick < 420);
-    const minInterval = isAnimating ? 0 : 28; // ~35 FPS during steady state, full 60/120Hz during active reveal & click
+    // Graduated frame-rate caps per phase:
+    //  • active reveal ("run") or kick-stutter: 60 FPS (16 ms)
+    //  • cut / fade-out: 30 FPS (33 ms) — smooth fade, 30 Hz unnoticeable
+    //  • steady-state hum: 35 FPS (28 ms)
+    const isReveal = (s.phase === "run" && !s.done) || (s.clock - s.kick < 420);
+    const minInterval = isReveal ? 16 : (s.phase === "cut" ? 33 : 28);
     const elapsed = s.last ? now - s.last : 16;
     if (minInterval > 0 && elapsed < minInterval) {
       s.raf = requestAnimationFrame(loop);
