@@ -428,9 +428,9 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     direction = "right",
     trigger = "mount",
     glow = 1,
-    spill = 1,
+    spill = 0.85,
     reach = 0.85,
-    intensity = 1,
+    intensity = 0.85,
     inset = 1, // tube axis from the edge: the tube sits flush in the corner
     length,
     mirrored = true,
@@ -573,7 +573,7 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     const flickerAmt = clamp(P.flicker ?? 1);
 
     const isSmallDevice = (s.w > 0 ? s.w : (typeof window !== "undefined" ? window.innerWidth : 1200)) < 1024;
-    const defaultLen = isSmallDevice ? 0.7 : 0.9;
+    const defaultLen = isSmallDevice ? 0.7 : 0.8;
     let targetLen = defaultLen;
     if (typeof P.length === "number") {
       targetLen = P.length;
