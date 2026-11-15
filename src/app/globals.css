@@ -30,7 +30,7 @@
     --glass-bg: rgba(10, 10, 10, 0.6);
 
     /* About section theme tokens */
-    --about-rgb: 10, 10, 10;
+    --about-rgb: 0, 0, 0;
     --about-fg: 241, 241, 241;
 
     /* Architecture Specific Colors */

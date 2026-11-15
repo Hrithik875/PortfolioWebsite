@@ -77,27 +77,17 @@ export default function HomePage() {
       {/* ── About section (full viewport width scroll-scrubbed replica) ─ */}
       <About />
 
-      {/* Skills flows on seamlessly — same background as About, no visible seam */}
-      <div
-        className="w-full relative z-[12]"
-        style={{
-          marginTop: "-35vh",
-          background: "rgb(var(--about-rgb))",
-          paddingTop: "10vh",
-        }}
-      >
-        <div className="w-full pb-20 z-20">
-          <SkillsSection />
-        </div>
+      {/* Skills — flows naturally below About, same background, no overlap panel */}
+      <div className="w-full pb-20">
+        <SkillsSection />
+      </div>
 
-        {/* ────────────────────────────────────────────────────────────
-            COMMENTED OUT SECTIONS ON HOMEPAGE (Per user request:
-            only Hero, About, Skills, Footer active on homepage)
-           ────────────────────────────────────────────────────────────
-<div className="existing-site-content w-full flex flex-col items-center">
-          // ──────────────────────────────────────────────────────────── 
-          // 2. START-HERE PATHS 
-          // ──────────────────────────────────────────────────────────── 
+      {/*
+        ────────────────────────────────────────────────────────────
+        COMMENTED OUT SECTIONS ON HOMEPAGE (Per user request:
+        only Hero, About, Skills, Footer active on homepage)
+        ────────────────────────────────────────────────────────────
+        <div className="existing-site-content w-full flex flex-col items-center">
           <section id="paths" className="w-full py-20 px-6 max-w-6xl mx-auto z-20">
             <div className="mb-12 text-center">
               <span className="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--text-secondary)]">
@@ -501,7 +491,6 @@ export default function HomePage() {
           <ReadyToArchitect />
         </div>
         */}
-      </div>
     </div>
   );
 }

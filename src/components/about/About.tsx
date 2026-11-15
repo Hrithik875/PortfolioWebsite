@@ -68,9 +68,24 @@ export function About() {
         const endScroll = () => rootTop() + rootEl.offsetHeight - (T.nextOverlapVh / 100) * vh();
         const measure = () => {
           const V = vh();
-          const v0 = 1 + T.coverSpeed, v1 = T.imageSpeed;
+          const v0 = 1 + T.coverSpeed;
           const s1 = (T.imageEntryVh / 100) * V;
           const dl = Math.max(1, (T.imageSettleVh / 100) * V);
+          const y0 = V + featherPx();                          // starts exactly where the bg starts
+          const S = Math.max(endScroll(), s1 + dl + 1);
+
+          // Continuous page flow: the portrait must smoothly travel completely off the top
+          // of the viewport so by the time About concludes and Skills enters, the bottom of the portrait
+          // has naturally cleared the screen (no abrupt cutoff or black box needed to cover it)
+          const imgH = wrapEl.offsetHeight || (T.imageHeightVh / 100) * V;
+          const targetY = y0 + imgH + 40;
+
+          const entryDist = v0 * s1 + (dl * v0) / 2;
+          const remainingScroll = dl / 2 + (S - s1 - dl);
+          const v1 = remainingScroll > 0
+            ? Math.max(0.35, (targetY - entryDist) / remainingScroll)
+            : T.imageSpeed;
+
           const dist = (s: number) => {
             if (s <= s1) return v0 * s;
             if (s <= s1 + dl) {
@@ -79,9 +94,9 @@ export function About() {
             }
             return v0 * s1 + (dl * (v0 + v1)) / 2 + v1 * (s - s1 - dl);
           };
-          const y0 = V + featherPx();                          // starts exactly where the bg starts
-          const S = Math.max(endScroll(), s1 + dl + 1);
-          return { y0, S, Y: dist(S), dist };
+
+          const Y = dist(S);
+          return { y0, S, Y, dist };
         };
         let geo = measure();
         const onRefreshInit = () => { geo = measure(); };

@@ -55,7 +55,7 @@ export const T = {
   coverSpeed: 0.7,     // extra speed of the About background vs the page (0.7 = 1.7× page speed)
   featherVh: 50,       // height of the blurred, fading edge that sits above About (vh) — increased for smoother hero→about blend
 
-  nextOverlapVh: 35,   // MUST equal the next section's negative marginTop in page.tsx (-35vh)
+  nextOverlapVh: 0,   // No overlap panel — continuous single-page flow
 
   counter: { from: 18, to: 30 },
 };
