@@ -92,6 +92,9 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const prefersReduced = () =>
   typeof window !== 'undefined' && (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
 
+const isDesktop = () =>
+  typeof window !== 'undefined' && window.innerWidth >= 1024;
+
 /** Normalises `images` / `image` into a single list. */
 const imagesOf = (item: FlowingMenuItem): string[] =>
   item.images && item.images.length > 0 ? item.images : item.image ? [item.image] : [];
@@ -157,6 +160,7 @@ function FlowingMenu({
   const layerTracks = useRef<(HTMLDivElement | null)[]>([]);
   const roll = useRef({ current: 0, p: 1, dir: 1, slots: [-1, -1], fromOpacity: 0, fromOffset: 0 });
   const [slots, setSlots] = useState([-1, -1]);
+  const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const settings = {
     speed: Math.max(0, speed),
@@ -537,6 +541,11 @@ function FlowingMenu({
     const playIntro = () => {
       if (introPlayedRef.current) return;
       introPlayedRef.current = true;
+      engine.current.touched = false;
+      if (leaveTimerRef.current) {
+        clearTimeout(leaveTimerRef.current);
+        leaveTimerRef.current = null;
+      }
 
       measureRef.current();
 
@@ -575,14 +584,28 @@ function FlowingMenu({
         );
       }
 
-      loop.timers.push(
-        setTimeout(
-          () => {
-            if (!loop.touched) releaseRef.current('bottom');
-          },
-          start + count * step + 120
-        )
-      );
+      if (!isDesktop()) {
+        loop.timers.push(
+          setTimeout(
+            () => {
+              if (!loop.touched) releaseRef.current('bottom');
+            },
+            start + count * step + 120
+          )
+        );
+      } else {
+        // Desktop: quickly and directly sweep from bottom back to top (index 0) and stay there
+        loop.timers.push(
+          setTimeout(
+            () => {
+              if (!loop.touched) {
+                goToRef.current(0, 'bottom');
+              }
+            },
+            start + count * step
+          )
+        );
+      }
     };
 
     const reverseIntro = () => {
@@ -590,6 +613,11 @@ function FlowingMenu({
       const loop = engine.current;
       loop.timers.forEach(clearTimeout);
       loop.timers = [];
+      loop.touched = false;
+      if (leaveTimerRef.current) {
+        clearTimeout(leaveTimerRef.current);
+        leaveTimerRef.current = null;
+      }
 
       // Smooth reverse transitions for lines back down into masks
       lines.forEach((node, index) => {
@@ -665,11 +693,18 @@ function FlowingMenu({
 
   useEffect(() => {
     const loop = engine.current;
-    return () => cancelAnimationFrame(loop.raf);
+    return () => {
+      cancelAnimationFrame(loop.raf);
+      if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
+    };
   }, []);
 
   const onPointerMove = (event: ReactPointerEvent<HTMLUListElement>) => {
     if (event.pointerType === 'touch') return;
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
     stopIntro();
     const c = cursor.current;
     const now = performance.now();
@@ -692,10 +727,25 @@ function FlowingMenu({
     const list = listRef.current;
     const b = band.current;
     if (!list || b.index < 0) return;
-    const rect = list.getBoundingClientRect();
-    if (event.clientY <= rect.top) release('top');
-    else if (event.clientY >= rect.bottom) release('bottom');
-    else release(halfOf(event.clientY, b.index));
+
+    if (!isDesktop()) {
+      const rect = list.getBoundingClientRect();
+      if (event.clientY <= rect.top) release('top');
+      else if (event.clientY >= rect.bottom) release('bottom');
+      else release(halfOf(event.clientY, b.index));
+      return;
+    }
+
+    // Desktop: with a small delay, move highlighter back to top (category 0) and stay there
+    cursor.current.y = null;
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current);
+    }
+    leaveTimerRef.current = setTimeout(() => {
+      if (band.current.shown) {
+        goToRef.current(0, 'bottom');
+      }
+    }, 320);
   };
 
   const linkHandlers = (item: FlowingMenuItem, index: number) => ({
@@ -712,7 +762,16 @@ function FlowingMenu({
     onBlur: (event: ReactFocusEvent<HTMLElement>) => {
       const next = event.relatedTarget as Node | null;
       if (next && listRef.current?.contains(next)) return;
-      release('bottom');
+      if (!isDesktop()) {
+        release('bottom');
+      } else {
+        if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
+        leaveTimerRef.current = setTimeout(() => {
+          if (band.current.shown) {
+            goToRef.current(0, 'bottom');
+          }
+        }, 320);
+      }
     },
     onClick: (event: ReactMouseEvent<HTMLElement>) => settingsRef.current.onItemClick?.(item, index, event)
   });

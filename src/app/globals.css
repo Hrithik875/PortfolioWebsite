@@ -342,6 +342,9 @@ html.intro-loading .hero-rise-delay {
   .skills-section {
     padding-left: 4.5vw;
     padding-right: 4.5vw;
+    padding-top: clamp(5rem, 10vh, 8rem);
+    padding-bottom: clamp(5rem, 10vh, 8rem);
+    margin-bottom: 0;
   }
 
   .skills-layout {

@@ -182,7 +182,7 @@ export function SkillsSection({ className = "" }: { className?: string }) {
       timers = [];
     };
 
-    // ── FORWARD ANIMATION (When entering viewport past 50%) ──
+    // ── FORWARD ANIMATION (When entering viewport: 40% from bottom / 60% from top) ──
     const play = () => {
       if (isRevealed) return;
       isRevealed = true;
@@ -219,7 +219,7 @@ export function SkillsSection({ className = "" }: { className?: string }) {
       );
     };
 
-    // ── REVERSE ANIMATION (When scrolling back up past 50%) ──
+    // ── REVERSE ANIMATION (When scrolling back up) ──
     const reverse = () => {
       if (!isRevealed) return;
       isRevealed = false;
@@ -256,10 +256,10 @@ export function SkillsSection({ className = "" }: { className?: string }) {
         const rect = headingClipRef.current.getBoundingClientRect();
         const vh = window.innerHeight;
 
-        // Trigger threshold: 50% vertically as requested!
-        const triggerY = vh * 0.50;
-        // Reverse threshold: 56% (slight hysteresis so it smoothly reverses when scrolling back up)
-        const reverseY = vh * 0.56;
+        // Trigger threshold: triggers earlier when heading reaches 40% from bottom (y <= 0.60 * vh)
+        const triggerY = vh * 0.60;
+        // Reverse threshold: 66% (slight hysteresis so it smoothly reverses when scrolling back up)
+        const reverseY = vh * 0.66;
 
         if (rect.top <= triggerY && rect.bottom >= 0) {
           play();

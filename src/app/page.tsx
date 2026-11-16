@@ -78,7 +78,7 @@ export default function HomePage() {
       <About />
 
       {/* Skills — flows naturally below About, same background, no overlap panel */}
-      <div className="w-full pb-20">
+      <div className="w-full pb-20 lg:pb-0">
         <SkillsSection />
       </div>
 
