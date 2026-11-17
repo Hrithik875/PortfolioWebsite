@@ -21,7 +21,6 @@ const serif = Instrument_Serif({
 // Inter Tight — tight neo-grotesk used by the About headline and paragraph.
 const sans = Inter_Tight({
   subsets: ["latin"],
-  weight: ["400", "500"],
   variable: "--font-sans-tight",
   display: "swap",
 });
