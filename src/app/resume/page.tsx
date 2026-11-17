@@ -26,9 +26,9 @@ import * as THREE from "three";
 
 /* ───────────────────────────── Content ───────────────────────────── */
 
-const AVATAR_SRC: string | null = null; // e.g. "/me.jpg"
+const LOGO_DARK_SRC = "/logo-dark.svg";
+const LOGO_LIGHT_SRC = "/logo-light.svg";
 const SIGNATURE_SRC: string | null = null; // e.g. "/signature.png"
-const AVATAR_FALLBACK_INITIAL = "H";
 const SIGNATURE_FALLBACK_TEXT = "Hrithik";
 
 /**
@@ -212,9 +212,6 @@ interface Theme {
   paper: string;
   paperText: string;
   paperAccent: string; // signature
-  avatarFrom: string;
-  avatarTo: string;
-  avatarInitial: string;
   /** paper shading (applied to the folded-away faces) */
   shadeMax: number;
   shadeTo: [number, number, number]; // colour the shade mixes toward
@@ -232,9 +229,6 @@ const THEMES: Record<ThemeName, Theme> = {
     paper: "#ffffff",
     paperText: "#171717",
     paperAccent: "#111111",
-    avatarFrom: "#d9cdbf",
-    avatarTo: "#a99887",
-    avatarInitial: "rgba(255,255,255,0.9)",
     shadeMax: 0.17,
     shadeTo: [0, 0, 0],
     grain: 0.1,
@@ -247,9 +241,6 @@ const THEMES: Record<ThemeName, Theme> = {
     paper: "#262626",
     paperText: "#ecebe6",
     paperAccent: "#f3f2ee",
-    avatarFrom: "#5a524b",
-    avatarTo: "#34302c",
-    avatarInitial: "rgba(255,255,255,0.88)",
     shadeMax: 0.09,
     shadeTo: [1, 1, 1],
     grain: -0.035,
@@ -715,7 +706,7 @@ function layoutResume(
 function drawLetter(
   paperPx: number,
   scale: number,
-  avatar: HTMLImageElement | null,
+  logo: HTMLImageElement | null,
   signature: HTMLImageElement | null,
   L: LetterLayout,
   T: Theme,
@@ -732,32 +723,21 @@ function drawLetter(
   g.fillStyle = T.paper;
   g.fillRect(0, 0, W, H);
 
-  /* avatar */
+  /* HM logo */
   const ax = L.avatarCx * u;
   const ay = (L.avatarTop + L.avatarD / 2) * u;
   const ar = (L.avatarD / 2) * u;
-  g.save();
-  g.beginPath();
-  g.arc(ax, ay, ar, 0, Math.PI * 2);
-  g.clip();
-  if (avatar) {
-    const s = Math.max((ar * 2) / avatar.width, (ar * 2) / avatar.height);
-    const w = avatar.width * s;
-    const h = avatar.height * s;
-    g.drawImage(avatar, ax - w / 2, ay - h / 2, w, h);
+
+  if (logo) {
+    const logoSize = ar * 2.0;
+    g.drawImage(logo, ax - logoSize / 2, ay - logoSize / 2, logoSize, logoSize);
   } else {
-    const grad = g.createLinearGradient(ax - ar, ay - ar, ax + ar, ay + ar);
-    grad.addColorStop(0, T.avatarFrom);
-    grad.addColorStop(1, T.avatarTo);
-    g.fillStyle = grad;
-    g.fillRect(ax - ar, ay - ar, ar * 2, ar * 2);
-    g.fillStyle = T.avatarInitial;
-    g.font = `${ar * 1.1}px "Instrument Serif", Georgia, serif`;
+    g.fillStyle = T.paperText;
+    g.font = `bold ${ar * 1.1}px "Instrument Serif", Georgia, serif`;
     g.textAlign = "center";
     g.textBaseline = "middle";
-    g.fillText(AVATAR_FALLBACK_INITIAL, ax, ay + ar * 0.05);
+    g.fillText("HM", ax, ay);
   }
-  g.restore();
 
   /* resume body — find the largest font size that fits the text band */
   const colX = L.colX * u;
@@ -1016,8 +996,9 @@ async function build(refs: Refs, isStale: () => boolean): Promise<Teardown | nul
     /* continue with whatever loaded */
   }
   await document.fonts.ready;
-  const [avatarImg, signatureImg] = await Promise.all([
-    loadImage(AVATAR_SRC),
+  const [logoDarkImg, logoLightImg, signatureImg] = await Promise.all([
+    loadImage(LOGO_DARK_SRC),
+    loadImage(LOGO_LIGHT_SRC),
     loadImage(SIGNATURE_SRC),
   ]);
   if (isStale()) return null;
@@ -1025,6 +1006,7 @@ async function build(refs: Refs, isStale: () => boolean): Promise<Teardown | nul
   /* ── theme (live) ── */
   let themeName: ThemeName = detectTheme();
   let theme: Theme = THEMES[themeName];
+  let logoImg = themeName === "dark" ? logoDarkImg : logoLightImg;
 
   /* ── geometry of the whole sequence ── */
   const compact = window.matchMedia(COMPACT_QUERY).matches;
@@ -1260,7 +1242,7 @@ async function build(refs: Refs, isStale: () => boolean): Promise<Teardown | nul
 
   const texScale = Math.min(dpr, 4096 / H);
   const texture = new THREE.CanvasTexture(
-    drawLetter(P, texScale, avatarImg, signatureImg, layout, theme, themeName === "dark"),
+    drawLetter(P, texScale, logoImg, signatureImg, layout, theme, themeName === "dark"),
   );
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
@@ -1409,10 +1391,11 @@ async function build(refs: Refs, isStale: () => boolean): Promise<Teardown | nul
       sh.uBase.value.copy(hexToVec3(theme.paper));
     }
 
+    const currentLogo = name === "dark" ? logoDarkImg : logoLightImg;
     texture.image = drawLetter(
       P,
       texScale,
-      avatarImg,
+      currentLogo,
       signatureImg,
       layout,
       theme,
@@ -1697,6 +1680,13 @@ export default function ResumePage() {
 
         {/* Accessible / no-WebGL / reduced-motion copy of the resume */}
         <article className="rs-flat">
+          <div className="rs-flat-logo-wrap">
+            <img
+              src={theme === "dark" ? LOGO_DARK_SRC : LOGO_LIGHT_SRC}
+              alt="Hrithik HM Logo"
+              className="rs-flat-logo"
+            />
+          </div>
           {RESUME.map((b, i) => {
             switch (b.t) {
               case "section":
@@ -1797,6 +1787,12 @@ html.lenis, html.lenis body { height: auto; }
   background: var(--rs-paper); color: var(--rs-paper-ink); z-index: 3;
   font-family: "Instrument Serif", Georgia, serif; font-size: 1.05rem; line-height: 1.5;
   text-align: left;
+}
+.rs-flat-logo-wrap {
+  display: flex; justify-content: center; margin-bottom: 2rem;
+}
+.rs-flat-logo {
+  width: 72px; height: auto;
 }
 .rs-fallback .rs-flat h2 {
   font: 700 .78rem/1.2 Helvetica, Arial, sans-serif; text-transform: uppercase;

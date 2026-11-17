@@ -16,6 +16,14 @@
  *  - Choreography (measured): cut (~220ms) → dark hold → 30px spark that flickers
  *    for ~0.5s → cubic ease-out growth over 2.6s → slow breathing hum.
  *  - Geometry scales with tube length, so the picture is the same at any size.
+ *  - Theme adaptive:
+ *      • Dark backgrounds use the original additive neon spectrum.
+ *      • Light backgrounds use "ink" mode. The hue order is the same as dark
+ *        mode (crimson → coral → peach → cream near the tube), and the FADE into
+ *        the page colour follows the dark spectrum's own brightness curve
+ *        (see lightFade() in the shader). That makes the top, bottom and centre
+ *        dissolve into white exactly like dark mode dissolves into black, with
+ *        no visible pink shelf or hard edge against the background.
  */
 
 import React, {
@@ -36,8 +44,22 @@ export interface NeonRevealHandle {
 }
 
 export interface NeonRevealProps {
+  /** Dark-mode palette: [tube, light]. */
   colors?: [string, string];
+  /**
+   * Light-mode palette: [core, glow, hot?]. Only used when `backgroundColor` is light.
+   * core = the vivid saturated band in the middle of the beam (crimson / magenta)
+   * glow = the soft outer body of the beam (pink), fading to the background colour
+   * hot  = the warm light right next to the tube (peach / amber). Optional.
+   * Default: ["#D6004C", "#FF5C84", "#FFC38B"].
+   */
+  lightColors?: [string, string, string?];
   backgroundColor?: string;
+  /**
+   * Surface used when `backgroundColor` is "transparent".
+   * Default: "#000000".
+   */
+  neonBase?: string;
   direction?: NeonDirection;
   expandFrom?: "center" | "left" | "right";
   trigger?: "mount" | "inView" | "manual";
@@ -90,7 +112,7 @@ function parseColorToUnit(input: string): RGB {
   let h = input.trim();
   if (h.startsWith("#")) {
     h = h.slice(1);
-    if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+    if (h.length === 3 || h.length === 4) h = h.split("").map((c) => c + c).join("");
     const n = parseInt(h.slice(0, 6), 16);
     if (!Number.isNaN(n)) {
       return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
@@ -101,7 +123,24 @@ function parseColorToUnit(input: string): RGB {
     const p = m[1].split(",").map((s) => parseFloat(s));
     return [(p[0] || 0) / 255, (p[1] || 0) / 255, (p[2] || 0) / 255];
   }
+  const named = input.trim().toLowerCase();
+  if (named === "white") return [1, 1, 1];
+  if (named === "black") return [0, 0, 0];
   return [0, 0, 0];
+}
+
+const luminance = (c: RGB) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+
+/**
+ * Resolve the surface the neon is painted over.
+ * "transparent" falls back to `neonBase`; everything else is used as-is.
+ */
+function resolveSurface(bg: string, base: string): { rgb: RGB; css: string | undefined } {
+  if (bg.trim().toLowerCase() === "transparent") {
+    return { rgb: parseColorToUnit(base), css: undefined };
+  }
+  const bgRGB = parseColorToUnit(bg);
+  return { rgb: bgRGB, css: bg };
 }
 
 const hash = (n: number) => {
@@ -113,6 +152,11 @@ const hash = (n: number) => {
    pair and keeps black fixed. Identity for the default colours. */
 const DEFAULT_TUBE: RGB = [1, 211 / 255, 168 / 255];
 const DEFAULT_LIGHT: RGB = [1, 77 / 255, 109 / 255];
+
+/* Light-mode default palette (vivid crimson, pink, peach) */
+const DEFAULT_CORE = "#D6004C";
+const DEFAULT_GLOW = "#FF5C84";
+const DEFAULT_HOT = "#FFC38B";
 
 type V3 = [number, number, number];
 const cross = (a: V3, b: V3): V3 => [
@@ -185,8 +229,12 @@ uniform float u_beam;     // beam gain (log10 offset applied)
 uniform float u_reach;    // horizontal reach multiplier
 uniform float u_hair;     // glass hairline visibility
 uniform float u_cornerBlur; // corner blur/feather strength 0..1
-uniform vec3  u_bg;
-uniform mat3  u_cmat;     // palette remap (identity for default colours)
+uniform vec3  u_bg;       // surface colour the effect is painted over
+uniform float u_light;    // 1 = light surface (ink mode), 0 = dark surface (neon mode)
+uniform vec3  u_inkCore;  // light mode: vivid saturated band (crimson / magenta)
+uniform vec3  u_inkGlow;  // light mode: soft outer body of the beam (pink)
+uniform vec3  u_inkHot;   // light mode: warm light next to the tube (peach / amber)
+uniform mat3  u_cmat;     // palette remap (identity for default colours, dark mode only)
 
 /* ---- spectrum: log10(intensity) -> colour (measured from the reference) ---- */
 const int NR = 28;
@@ -310,9 +358,42 @@ vec3 levelScale(vec3 c, float l) {
   return vec3(c.r * l, c.g * pow(l, 1.45), c.b * pow(l, 1.9));
 }
 
+/* ---- light mode ----
+   l = log10 beam intensity, the SAME value the dark spectrum is indexed by.
+
+   lightFade(l) is how far the pixel is from the page colour (0 = page colour,
+   1 = full crimson). It is fitted to the red-channel brightness of the dark
+   spectrum (26/190 at -3.4, 57/190 at -2.9, 106/190 at -2.5, 190/190 at -2.0),
+   so the beam dissolves into white with the same falloff that the dark beam
+   dissolves into black. The old mapping saturated to pink far too early, which
+   left a visible edge at the top/bottom and a pink centre. */
+float lightFade(float l) {
+  return pow(clamp((l + 4.2) / 2.2, 0.0, 1.0), 1.8);
+}
+
+/* hue order matches dark mode:  cream → peach → coral → crimson → pink → (page colour) */
+vec3 inkRamp(float l) {
+  vec3 cCoral = mix(u_inkCore, u_inkHot, 0.50);
+  vec3 cCream = mix(u_inkHot, vec3(1.0, 0.97, 0.88), 0.65);
+
+  // Outer body: pink glow warming into the crimson core, then blended into
+  // the page colour by lightFade(). Because the colour is a mix toward the
+  // page colour, it always converges exactly onto the background.
+  if (l < -2.0) {
+    vec3 hue = mix(u_inkGlow, u_inkCore, smoothstep(-3.2, -2.2, l));
+    return mix(u_bg, hue, lightFade(l));
+  }
+  // Inner body near the tube: fully saturated, same bands as dark mode.
+  if (l < -1.6) return mix(u_inkCore, cCoral,  (l + 2.0) / 0.4);
+  if (l < -1.2) return mix(cCoral,   u_inkHot, (l + 1.6) / 0.4);
+  return mix(u_inkHot, cCream, clamp((l + 1.2) / 0.35, 0.0, 1.0));
+}
+
 void main() {
   vec2 p = gl_FragCoord.xy / u_dpr;
   p.y = u_res.y - p.y;
+
+  bool isLight = u_light > 0.5;
 
   float hhFull = u_full * 0.5;
   float hhLit  = max(u_lit * 0.5, 0.0);
@@ -368,7 +449,12 @@ void main() {
            + log2(max(u_level, 1e-6)) * 0.30102999566;
   vec3 col = (Itot > 1e-9) ? ramp(lI) : vec3(0.0);
 
+  // Light mode reads the same log intensity as the dark spectrum.
+  float lIc = (Itot > 1e-9) ? lI : -9.0;
+
   // tubes
+  float totalHair = 0.0;
+  float tubeLum = 0.0;   // light mode: strongest tube brightness at this pixel
   for (int k = 0; k < 2; k++) {
     float present = (k == 0) ? u_left : u_right;
     if (present < 0.5) continue;
@@ -383,7 +469,12 @@ void main() {
     float overF = max(0.0, ay - hhFull);
     float endF = 1.0 - smoothstep(0.0, 2.0, overF);
     float gl = exp(-dxa * dxa / (2.0 * 1.8 * 1.8)) * endF;
-    col = max(col, vec3(59.0, 50.0, 46.0) / 255.0 * 1.04 * gl * u_hair * cornerFade);
+    totalHair += gl * u_hair * cornerFade;
+    // dark mode: the hairline is part of the light field.
+    // light mode: it is drawn separately below, so it does not tint the ramp.
+    if (!isLight) {
+      col = max(col, vec3(59.0, 50.0, 46.0) / 255.0 * 1.04 * gl * u_hair * cornerFade);
+    }
 
     if (u_level > 0.0005 && hhLit > 0.5) {
       // lit tube: core inside segment, aura outside/around
@@ -396,14 +487,40 @@ void main() {
       tc = levelScale(tc, u_level);
       // fade the tube tip glow at the corners; use a softer fade for the core (dLookup < 6)
       float tipFade = mix(cornerFade, 1.0, smoothstep(0.0, 6.0, dLookup) * (1.0 - cornerFade));
-      col = max(col, tc * tipFade);
+      if (isLight) {
+        tubeLum = max(tubeLum, dot(tc * tipFade, vec3(0.33333)));
+      } else {
+        col = max(col, tc * tipFade);
+      }
     }
   }
 
-  col = u_cmat * col;
-  col = max(col, u_bg);
+  if (isLight) {
+    // LIGHT MODE: same hue order as dark mode; the fade into the page colour
+    // follows the dark spectrum's brightness curve (see lightFade).
+    vec3 ink = inkRamp(lIc);
+    float fade = lightFade(lIc);
 
-  // dither to avoid banding in the dark gradients
+    // Tube layer: warm peach rim around a white-hot core.
+    float hotW  = smoothstep(0.12, 0.50, tubeLum) * 0.85;
+    float coreW = smoothstep(0.62, 0.92, tubeLum);
+    ink = mix(ink, u_inkHot, hotW);
+    ink = mix(ink, vec3(1.0, 0.97, 0.88), coreW);
+
+    // Glass hairline: a faint deep line along the unlit tube. It fades out
+    // as the tube lights up and wherever the beam is already strong.
+    float hairW = clamp(totalHair, 0.0, 1.0)
+                * (1.0 - smoothstep(0.30, 0.75, fade))
+                * (1.0 - 0.85 * clamp(u_level, 0.0, 1.0));
+    vec3 hairCol = mix(u_bg, u_inkCore, 0.45);
+    col = mix(ink, hairCol, hairW);
+  } else {
+    // NEON MODE: traditional additive spectrum over a dark floor
+    col = u_cmat * col;
+    col = max(col, u_bg);
+  }
+
+  // dither to avoid banding in the gradients
   float n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453)
           + fract(sin(dot(gl_FragCoord.xy + 17.0, vec2(26.651, 57.173))) * 24634.6345);
   col += (n - 1.0) / 255.0 * 0.75;
@@ -423,13 +540,16 @@ const FLICKER_STEP_MS = 64;
 type Phase = "off" | "run" | "cut";
 const UNIFORMS = [
   "u_res", "u_dpr", "u_inset", "u_yc", "u_full", "u_lit", "u_level", "u_sc",
-  "u_left", "u_right", "u_glow", "u_beam", "u_reach", "u_hair", "u_cornerBlur", "u_bg", "u_cmat",
+  "u_left", "u_right", "u_glow", "u_beam", "u_reach", "u_hair", "u_cornerBlur",
+  "u_bg", "u_light", "u_inkCore", "u_inkGlow", "u_inkHot", "u_cmat",
 ] as const;
 
 export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function NeonReveal(props, ref) {
   const {
     colors = ["#FFD3A8", "#FF4D6D"],
+    lightColors = [DEFAULT_CORE, DEFAULT_GLOW, DEFAULT_HOT],
     backgroundColor = "#000000ff",
+    neonBase = "#000000",
     direction = "right",
     trigger = "mount",
     glow = 1,
@@ -476,6 +596,10 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     cachedLightRGB: [0, 0, 0] as RGB,
     cachedBgKey: "",
     cachedBgRGB: [0, 0, 0] as RGB,
+    cachedInkKey: "",
+    cachedInkCore: [0, 0, 0] as RGB,
+    cachedInkGlow: [0, 0, 0] as RGB,
+    cachedInkHot: [0, 0, 0] as RGB,
     cachedCmat: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]) as ReturnType<typeof paletteMatrix>,
   });
 
@@ -573,6 +697,7 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
 
     if (!P.paused) s.clock += dtMs;
 
+    // dark-mode palette
     const cols = P.colors ?? colors;
     const colKey = `${cols[0]}|${cols[1]}`;
     if (colKey !== s.cachedColorsKey) {
@@ -581,13 +706,28 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
       s.cachedLightRGB = parseColorToUnit(cols[1]);
       s.cachedCmat = paletteMatrix(s.cachedTubeRGB, s.cachedLightRGB);
     }
-    const bgKey = P.backgroundColor ?? backgroundColor;
+
+    // light-mode palette: [core, glow, hot?]
+    const inks = P.lightColors ?? lightColors;
+    const hotColor = inks[2] ?? DEFAULT_HOT;
+    const inkKey = `${inks[0]}|${inks[1]}|${hotColor}`;
+    if (inkKey !== s.cachedInkKey) {
+      s.cachedInkKey = inkKey;
+      s.cachedInkCore = parseColorToUnit(inks[0]);
+      s.cachedInkGlow = parseColorToUnit(inks[1]);
+      s.cachedInkHot = parseColorToUnit(hotColor);
+    }
+
+    // Surface the effect is painted over (supports dark and light modes)
+    const bgProp = P.backgroundColor ?? backgroundColor;
+    const baseProp = P.neonBase ?? neonBase;
+    const bgKey = `${bgProp}|${baseProp}`;
     if (bgKey !== s.cachedBgKey) {
       s.cachedBgKey = bgKey;
-      s.cachedBgRGB = parseColorToUnit(bgKey);
+      s.cachedBgRGB = resolveSurface(bgProp, baseProp).rgb;
     }
-    const tubeRGB = s.cachedTubeRGB;
     const bgRGB = s.cachedBgRGB;
+    const isLightSurface = luminance(bgRGB) > 0.35;
 
     const D = P.revealDelay ?? 0;
     const T = Math.max(50, P.revealDuration ?? 2600);
@@ -595,7 +735,7 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     const flickerAmt = clamp(P.flicker ?? 1);
 
     const isSmallDevice = (s.w > 0 ? s.w : (typeof window !== "undefined" ? window.innerWidth : 1200)) < 1024;
-    const defaultLen = isSmallDevice ? 0.7 : 0.8;
+    const defaultLen = isSmallDevice ? 0.6 : 0.6;
     let targetLen = defaultLen;
     if (typeof P.length === "number") {
       targetLen = P.length;
@@ -728,6 +868,10 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     gl.uniform1f(u.u_hair, 1);
     gl.uniform1f(u.u_cornerBlur, clamp(P.cornerBlur ?? 1, 0, 1));
     gl.uniform3f(u.u_bg, bgRGB[0], bgRGB[1], bgRGB[2]);
+    gl.uniform1f(u.u_light, isLightSurface ? 1 : 0);
+    gl.uniform3f(u.u_inkCore, s.cachedInkCore[0], s.cachedInkCore[1], s.cachedInkCore[2]);
+    gl.uniform3f(u.u_inkGlow, s.cachedInkGlow[0], s.cachedInkGlow[1], s.cachedInkGlow[2]);
+    gl.uniform3f(u.u_inkHot, s.cachedInkHot[0], s.cachedInkHot[1], s.cachedInkHot[2]);
     gl.uniformMatrix3fv(u.u_cmat, false, s.cachedCmat);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -774,6 +918,8 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
       return;
     }
 
+    const state = S.current;
+
     const resize = () => {
       const r = root.getBoundingClientRect();
       const d = Math.min(window.devicePixelRatio || 1, propsRef.current.dpr ?? 1);
@@ -806,7 +952,6 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     };
     document.addEventListener("visibilitychange", onVisibility);
 
-    const state = S.current;
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       ro.disconnect();
@@ -877,7 +1022,8 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     wake();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    props.paused, colors[0], colors[1], backgroundColor, direction, mirrored,
+    props.paused, colors[0], colors[1], lightColors[0], lightColors[1], lightColors[2],
+    backgroundColor, neonBase, direction, mirrored,
     glow, spill, reach, intensity, inset,
     typeof length === "object" ? JSON.stringify(length) : length,
     hum,
@@ -899,6 +1045,9 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     }
   };
 
+  // CSS surface behind the canvas: matches the resolved background color
+  const surfaceCss = resolveSurface(backgroundColor, neonBase).css;
+
   return (
     <div
       ref={rootRef}
@@ -909,7 +1058,7 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
         width: "100%",
         height: "100%",
         overflow: "hidden",
-        backgroundColor: backgroundColor === "transparent" ? undefined : backgroundColor,
+        backgroundColor: surfaceCss,
         cursor: interactive ? "pointer" : undefined,
         ...style,
       }}

@@ -498,7 +498,7 @@ export function IntroReveal() {
             flicker={0.75}
             cornerBlur={1}
             dpr={1}
-            backgroundColor="#000000"
+            backgroundColor={isLight ? "#ffffff" : "#000000"}
           />
         </div>
 
