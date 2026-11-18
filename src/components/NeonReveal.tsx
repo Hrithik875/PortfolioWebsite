@@ -154,9 +154,9 @@ const DEFAULT_TUBE: RGB = [1, 211 / 255, 168 / 255];
 const DEFAULT_LIGHT: RGB = [1, 77 / 255, 109 / 255];
 
 /* Light-mode default palette (vivid crimson, pink, peach) */
-const DEFAULT_CORE = "#D6004C";
-const DEFAULT_GLOW = "#FF5C84";
-const DEFAULT_HOT = "#FFC38B";
+const DEFAULT_CORE = "#ff0044ff";
+const DEFAULT_GLOW = "#ff0026ff";
+const DEFAULT_HOT = "#f8c09eff";
 
 type V3 = [number, number, number];
 const cross = (a: V3, b: V3): V3 => [

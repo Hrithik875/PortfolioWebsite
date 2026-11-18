@@ -458,6 +458,7 @@ export function IntroReveal() {
     <div
       ref={containerRef}
       className={`intro-reveal ${isFinished ? "is-done" : "is-animating"}`}
+      data-theme={currentTheme}
       aria-label="Introduction Reveal"
     >
       {/* Strict preloader overlays: completely unmounted when timeline completes */}

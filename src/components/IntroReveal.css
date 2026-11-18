@@ -93,7 +93,21 @@
 .intro-reveal .preloader,
 .intro-reveal .split-overlay {
   background-color: #a50000;
-  color: #fff;
+  color: #ffffff;
+}
+
+[data-theme="light"] .intro-reveal .preloader,
+[data-theme="light"] .intro-reveal .split-overlay,
+.intro-reveal[data-theme="light"] .preloader,
+.intro-reveal[data-theme="light"] .split-overlay {
+  color: #000000;
+}
+
+[data-theme="dark"] .intro-reveal .preloader,
+[data-theme="dark"] .intro-reveal .split-overlay,
+.intro-reveal[data-theme="dark"] .preloader,
+.intro-reveal[data-theme="dark"] .split-overlay {
+  color: #ffffff;
 }
 
 .intro-reveal .preloader,
