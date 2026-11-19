@@ -15,7 +15,6 @@ import {
   User,
   FileText,
   Mail,
-  Clock,
   type LucideIcon,
 } from "lucide-react";
 import ClockOverlay from "@/components/ClockOverlay";
@@ -488,6 +487,64 @@ const menuRowClass =
   "flex flex-row-reverse items-center gap-4 py-2.5 px-4 rounded-full text-[15px] tracking-tight whitespace-nowrap text-[color:var(--text-primary)] transition-all";
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+/* ── Live analog clock icon ──────────────────────────────────────────────────
+   Ring, minute hand and centre dot use var(--text-primary), so they are
+   white in dark mode and black in light mode automatically.
+   The hour hand keeps the orange accent in both themes.
+   Time is read after mount (not during render) to avoid hydration mismatches. */
+const CLOCK_ACCENT = "#ff4d00";
+
+function LiveClockIcon({ size = 20 }: { size?: number }) {
+  // total minutes since midnight; null until mounted
+  const [mins, setMins] = useState<number | null>(null);
+
+  useEffect(() => {
+    const read = () => {
+      const d = new Date();
+      return d.getHours() * 60 + d.getMinutes();
+    };
+    setMins(read());
+    const id = setInterval(() => {
+      const next = read();
+      setMins((prev) => (prev === next ? prev : next)); // only re-render when the minute changes
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const total = mins ?? 0;
+  const minute = total % 60;
+  const hour = Math.floor(total / 60) % 12;
+  const minuteDeg = minute * 6; // 360 / 60
+  const hourDeg = hour * 30 + minute * 0.5; // 360 / 12, plus drift within the hour
+
+  const handStyle = (deg: number): React.CSSProperties => ({
+    transform: `rotate(${deg}deg)`,
+    transformOrigin: "10.5px 10.5px",
+    transformBox: "view-box",
+    transition: "transform .6s cubic-bezier(.32,.72,0,1)",
+  });
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 21 21"
+      fill="none"
+      aria-hidden="true"
+      style={{ opacity: mins === null ? 0.6 : 1, transition: "opacity .3s ease" }}
+    >
+      {/* ring */}
+      <circle cx="10.5" cy="10.5" r="10" stroke="var(--text-primary)" strokeWidth="1.75" />
+      {/* minute hand (long) */}
+      <path d="M10.5 10.5V3.43" stroke="var(--text-primary)" strokeWidth="1.75" style={handStyle(minuteDeg)} />
+      {/* hour hand (short, accent colour) */}
+      <path d="M10.5 10.5V4.5" stroke={CLOCK_ACCENT} strokeWidth="1.75" style={handStyle(hourDeg)} />
+      {/* centre dot */}
+      <circle cx="10.5" cy="10.5" r="0.75" fill="var(--text-primary)" />
+    </svg>
+  );
+}
 
 export function Navbar() {
   const { introDone } = useIntro();
@@ -1513,7 +1570,7 @@ export function Navbar() {
                       "opacity .25s ease, transform .35s cubic-bezier(.32,.72,0,1), background-color .25s ease",
                   }}
                 >
-                  <Clock size={16} />
+                  <LiveClockIcon size={20} />
                 </button>
               )}
 
