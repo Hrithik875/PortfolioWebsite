@@ -29,6 +29,12 @@
  *    the exact boundary instant rather than whenever the frame noticed it.
  *  - The visual state is derived from the wall clock. If the tab was hidden, it snaps to the
  *    correct time instantly on return (no catch-up animation).
+ *
+ *  - LAYOUTS
+ *      • default (desktop, side panel): city bottom-left, sound bottom-right.
+ *      • `fullscreen` (phones / tablets, opened from the navbar clock button): square corners,
+ *        the city sits just ABOVE the time (clear of the navbar) and the sound toggle is at the
+ *        bottom CENTER.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -101,9 +107,19 @@ const VOLUME = { tick: 0.5, accent: 0.8 };
 const LOOKAHEAD_S = 65; // seconds of ticks pre-scheduled (must exceed browsers' ~60s background timer throttling)
 const RESYNC_DRIFT_S = 0.02; // rebuild the pending schedule if it drifted more than this
 
-// Space reserved on stacked (<1024px) layouts so the ring never touches the floating navbar
+// Widths >= this use the desktop side-panel layout (must match the navbar's desktop breakpoint)
+const DESKTOP_MIN_WIDTH = 1009;
+
+// Space reserved on small layouts so the ring never touches the floating navbar (top) or the
+// sound toggle (bottom)
 const TOP_SAFE = 80;
 const BOTTOM_SAFE = 64;
+
+// FULLSCREEN layout (opened from the navbar clock button)
+const FS_NAV_SAFE = 76; // px reserved for the floating navbar at the top
+const FS_CITY_BLOCK = 44; // px reserved BELOW the navbar for the city label (sits above the ring)
+const FS_RING_FRAC = 0.43; // ring radius as a fraction of the screen width (was 0.33 -> bigger clock)
+const CITY_GAP = 22; // px between the outer edge of the ring and the city label
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -240,10 +256,13 @@ export default function ClockPanel({
   location = "BENGALURU, INDIA",
   timeZone = "Asia/Kolkata",
   className = "",
+  fullscreen = false,
 }: {
   location?: string;
   timeZone?: string;
   className?: string;
+  /** Fullscreen layout: square corners, city just above the time, sound toggle bottom-center. */
+  fullscreen?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -455,19 +474,26 @@ export default function ClockPanel({
       cy = 0;
 
     const resize = () => {
-      const r = panel.getBoundingClientRect();
-      w = r.width;
-      h = r.height;
+      // clientWidth/Height ignore CSS transforms (the overlay is scaled while the menu animates)
+      w = panel.clientWidth;
+      h = panel.clientHeight;
       dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
-      const small = window.innerWidth < 1024;
-      const top = small ? TOP_SAFE : 0;
+      // Fullscreen (phones / tablets) always uses the compact layout; otherwise decide by width.
+      const small = fullscreen || window.innerWidth < DESKTOP_MIN_WIDTH;
+      // Fullscreen reserves room for the navbar AND the city label above the ring.
+      const top = fullscreen ? FS_NAV_SAFE + FS_CITY_BLOCK : small ? TOP_SAFE : 0;
       const bottom = small ? BOTTOM_SAFE : 0;
       cy = top + (h - top - bottom) / 2;
-      R = small
-        ? Math.max(60, Math.min(w * 0.33, (h - top - bottom) / 2 - 18))
-        : Math.min(w * 0.33, h * 0.27);
+      if (fullscreen) {
+        // Bigger clock: the ring fills most of the screen width
+        R = Math.max(60, Math.min(w * FS_RING_FRAC, (h - top - bottom) / 2 - 10));
+      } else {
+        R = small
+          ? Math.max(60, Math.min(w * 0.33, (h - top - bottom) / 2 - 18))
+          : Math.min(w * 0.33, h * 0.27);
+      }
       host.style.fontSize = Math.round(R * 0.05 * 10) / 10 + "px";
       setLayout({ R, cy });
     };
@@ -896,14 +922,20 @@ export default function ClockPanel({
       timers.forEach(clearTimeout);
       killEls();
     };
-  }, [timeZone]);
+  }, [timeZone, fullscreen]);
 
   const fontSize = Math.round(layout.R * 0.224);
+
+  // Fullscreen: the city sits ABOVE the whole clock, i.e. above the top edge of the ring
+  // (and below the navbar), not on the time digits or inside the ring.
+  const cityStyle: React.CSSProperties | undefined = fullscreen
+    ? { top: layout.cy != null ? layout.cy - layout.R - CITY_GAP : "18%" }
+    : undefined;
 
   return (
     <div
       ref={panelRef}
-      className={`rc-panel ${mono.className} ${className}`}
+      className={`rc-panel${fullscreen ? " rc-fs" : ""} ${mono.className} ${className}`}
       style={{ ["--rc-sans" as string]: sans.style.fontFamily }}
     >
       <style>{CSS}</style>
@@ -927,7 +959,9 @@ export default function ClockPanel({
         </span>
       </div>
 
-      <div className="rc-ui rc-city">{location}</div>
+      <div className="rc-ui rc-city" style={cityStyle}>
+        {location}
+      </div>
 
       <button
         type="button"
@@ -962,11 +996,18 @@ const CSS = `
 .rc-colon i{display:block;width:.13em;height:.13em;background:currentColor}
 .rc-btn{position:absolute;bottom:41px;display:flex;align-items:center;gap:8px;background:none;border:0;padding:0;margin:0;color:inherit;cursor:pointer;font-family:inherit}
 .rc-right{right:41px}
-@media (max-width:1023px){
+@media (max-width:1008px){
   .rc-ui{font-size:12px}
   .rc-city{left:20px;bottom:20px}
   .rc-btn{bottom:20px}
   .rc-right{right:20px}
 }
+
+/* ---- FULLSCREEN layout (phones / tablets): square corners, city above the time, sound bottom-center ---- */
+.rc-panel.rc-fs{border-radius:0;min-height:0}
+.rc-fs .rc-ui{font-size:13px}
+.rc-fs .rc-city{left:50%;bottom:auto;transform:translate(-50%,-100%);text-align:center}
+.rc-fs .rc-btn{left:50%;right:auto;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%)}
+
 @media (prefers-reduced-motion:reduce){.rc-out,.rc-in{animation-duration:.01s}}
 `;

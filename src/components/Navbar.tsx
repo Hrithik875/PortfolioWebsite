@@ -15,8 +15,10 @@ import {
   User,
   FileText,
   Mail,
+  Clock,
   type LucideIcon,
 } from "lucide-react";
+import ClockOverlay from "@/components/ClockOverlay";
 import { Logo } from "@/components/Logo";
 import { m, animate, useMotionValue, Variants } from "framer-motion";
 import { useTheme } from "./ThemeProvider";
@@ -75,6 +77,10 @@ const MENU_BG_DARK =
 const MENU_BG_LIGHT =
   "linear-gradient(135deg, rgba(255, 255, 255, 0.90) 0%, rgba(245, 247, 252, 0.78) 45%, rgba(232, 236, 245, 0.88) 100%)";
 const SHELL_SELECTOR = "#page-shell"; // wrapper around your page content (see layout snippet)
+
+/* Where the mobile clock button is shown. null = on every page.
+   Use e.g. ["/contact"] to show it only on the contact page. */
+const CLOCK_ROUTES: string[] | null = null;
 
 /* ── Glass tunables ──────────────────────────────────────────────────────── */
 const ENABLE_REFRACTION = true; // false = frost + rim only (no edge bending)
@@ -496,6 +502,10 @@ export function Navbar() {
   const [boost, setBoost] = useState(0);
   const [glassReady, setGlassReady] = useState(false); // glass is built, decoded and may fade in
   const [pendingIdx, setPendingIdx] = useState<number | null>(null); // optimistic active item (set on click)
+  const [clockOpen, setClockOpen] = useState(false); // full-screen clock (phones / tablets)
+  const clockOpenRef = useRef(false);
+  clockOpenRef.current = clockOpen;
+  const hiddenShellRef = useRef<HTMLElement | null>(null); // page hidden (not pushed) while the clock is the "current page"
 
   const { setTheme, resolvedTheme } = useTheme();
   const currentTheme = mounted ? resolvedTheme : "dark";
@@ -815,7 +825,15 @@ export function Navbar() {
       bodyOverflow: body.style.overflow,
       bodyTouchAction: body.style.touchAction,
     };
-    if (el) {
+
+    if (el && clockOpenRef.current) {
+      // The CLOCK is the current page: don't push / raise the contact page. Just hide it so only
+      // the clock (pushed back by applyShell) is visible in front of the menu layer.
+      el.dataset.prevVisibility = el.style.visibility;
+      el.style.visibility = "hidden";
+      hiddenShellRef.current = el;
+      shellRef.current = null; // applyShell then leaves the shell alone
+    } else if (el) {
       const rect = el.getBoundingClientRect();
       shellGeo.current = {
         top: rect.top + sy,
@@ -867,6 +885,24 @@ export function Navbar() {
   const applyShell = useCallback((p: number) => {
     const layer = menuLayerRef.current;
     if (layer) layer.style.opacity = clamp01(p / 0.25).toFixed(3); // frosted glass fades in almost immediately
+
+    /* Push the full-screen clock back exactly like the page (same scale, shift and corner radius) */
+    const clock = document.getElementById("clock-overlay-push");
+    if (clock) {
+      if (p <= 0.001) {
+        clock.style.transform = "";
+        clock.style.transformOrigin = "";
+        clock.style.clipPath = "";
+      } else {
+        const cs = 1 - (1 - PAGE_SCALE) * p;
+        const ctx = -PAGE_SHIFT * window.innerWidth * p;
+        const cr = (PAGE_RADIUS * p) / cs;
+        clock.style.transformOrigin = "50% 50%";
+        clock.style.transform = `translate3d(${ctx.toFixed(2)}px,0,0) scale(${cs.toFixed(4)})`;
+        clock.style.clipPath = `inset(0px round ${cr.toFixed(2)}px)`;
+      }
+    }
+
     const el = shellRef.current;
     if (!el || !shellActiveRef.current) return;
     const g = shellGeo.current;
@@ -885,6 +921,15 @@ export function Navbar() {
   const restoreShell = useCallback(() => {
     const el = shellRef.current;
     const sv = shellSaved.current;
+
+    // Un-hide the page if it was only hidden (clock mode)
+    const hidden = hiddenShellRef.current;
+    if (hidden) {
+      hidden.style.visibility = hidden.dataset.prevVisibility ?? "";
+      delete hidden.dataset.prevVisibility;
+      hiddenShellRef.current = null;
+    }
+
     if (el) {
       const overlay = el.querySelector("#page-shell-overlay");
       if (overlay) overlay.remove();
@@ -1176,6 +1221,7 @@ export function Navbar() {
   /* Route settled: close the drawer, drop the optimistic active item, and sync navbar phase to scroll */
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    setClockOpen(false);
     setPendingIdx(null);
     if (desktopRef.current && mounted) {
       requestAnimationFrame(() => {
@@ -1289,6 +1335,7 @@ export function Navbar() {
   }, [restoreShell]);
 
   const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  const toggleClock = () => setClockOpen((o) => !o);
 
   const forcePill = () => {
     forcedRef.current = true;
@@ -1347,10 +1394,18 @@ export function Navbar() {
   const itemState = menuOpen ? "visible" : "hidden";
   const isDarkNow = currentTheme === "dark";
   const ThemeIcon = isDarkNow ? Sun : Moon;
+  const showClockBtn = !CLOCK_ROUTES || CLOCK_ROUTES.includes(pathname);
 
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: GLASS_CSS }} />
+
+      <ClockOverlay
+  open={clockOpen}
+  onClose={() => setClockOpen(false)}
+  menuOpen={isMobileMenuOpen}
+  onMenuTap={closeMenu}
+/>
 
       {/* SVG filters that bend the backdrop along the glass edges (Chromium only) */}
       {refract && tiles && (
@@ -1438,6 +1493,30 @@ export function Navbar() {
               </span>
             </Link>
             <div className="relative z-10 flex items-center gap-1.5 shrink-0">
+              {/* Clock button: opens the full-screen clock (fades away while the menu is open, like the theme toggle) */}
+              {showClockBtn && (
+                <button
+                  type="button"
+                  aria-label={clockOpen ? "Close clock" : "Open clock"}
+                  aria-pressed={clockOpen}
+                  onClick={toggleClock}
+                  tabIndex={menuOpen ? -1 : 0}
+                  className="w-9 h-9 flex items-center justify-center rounded-full border border-[color:var(--border)] text-[color:var(--text-primary)] active:scale-90"
+                  style={{
+                    backgroundColor: clockOpen
+                      ? "color-mix(in srgb, var(--text-primary) 14%, transparent)"
+                      : "color-mix(in srgb, var(--text-primary) 5%, transparent)",
+                    opacity: menuOpen ? 0 : 1,
+                    transform: menuOpen ? "scale(0.6)" : "scale(1)",
+                    pointerEvents: menuOpen ? "none" : "auto",
+                    transition:
+                      "opacity .25s ease, transform .35s cubic-bezier(.32,.72,0,1), background-color .25s ease",
+                  }}
+                >
+                  <Clock size={16} />
+                </button>
+              )}
+
               {/* Theme toggle: fades away while the menu is open (it lives inside the menu then) */}
               <button
                 type="button"

@@ -1,14 +1,28 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, Mail, Send, Copy, Check } from "lucide-react";
 import { PROFILE } from "@/data/portfolio-data";
 import ClockPanel from "@/components/ClockPanel";
 
+/* True only at desktop widths (same breakpoint as the navbar: > 1008px). */
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1009px)");
+    const on = () => setIsDesktop(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return isDesktop;
+}
+
 export default function ContactPage() {
   const [copied, setCopied] = useState(false);
   const [formData, setFormData] = useState({ name: "", email: "", message: "" });
+  const isDesktop = useIsDesktop();
 
   const copyEmail = () => {
     navigator.clipboard.writeText(PROFILE.email);
@@ -25,14 +39,15 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="w-full min-h-screen p-3 lg:flex lg:gap-3 lg:items-start">
-      {/* LEFT — radial clock (sticky on desktop, stacked on top for mobile) */}
-      <aside className="w-full h-[420px] sm:h-[480px] lg:sticky lg:top-3 lg:h-[calc(100vh-1.5rem)] lg:w-[42%] lg:shrink-0">
-        <ClockPanel location="BENGALURU, INDIA" timeZone="Asia/Kolkata" />
+    <div className="w-full min-h-screen p-3 min-[1009px]:flex min-[1009px]:gap-3 min-[1009px]:items-start">
+      {/* LEFT — radial clock. Desktop only (sticky side panel).
+          On phones / tablets it lives behind the clock button in the navbar instead. */}
+      <aside className="hidden min-[1009px]:block min-[1009px]:sticky min-[1009px]:top-3 min-[1009px]:h-[calc(100vh-1.5rem)] min-[1009px]:w-[42%] min-[1009px]:shrink-0">
+        {isDesktop && <ClockPanel location="BENGALURU, INDIA" timeZone="Asia/Kolkata" />}
       </aside>
 
       {/* RIGHT — existing contact content */}
-      <main className="flex-1 min-w-0 pt-16 lg:pt-32 pb-24 px-4 sm:px-8 lg:px-10">
+      <main className="flex-1 min-w-0 pt-24 min-[1009px]:pt-32 pb-24 px-4 sm:px-8 min-[1009px]:px-10">
         {/* Header */}
         <div className="mb-14">
           <Link
