@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import ClockOverlay from "@/components/ClockOverlay";
+import { ThemeToggleIcon } from "@/components/ThemeToggleIcon";
 import { Logo } from "@/components/Logo";
 import { m, animate, useMotionValue, Variants } from "framer-motion";
 import { useTheme } from "./ThemeProvider";
@@ -1391,7 +1392,12 @@ export function Navbar() {
     };
   }, [restoreShell]);
 
-  const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  const toggleTheme = () => {
+    const root = document.documentElement;
+    root.classList.add("theme-fade");
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+    window.setTimeout(() => root.classList.remove("theme-fade"), 400);
+  };
   const toggleClock = () => setClockOpen((o) => !o);
 
   const forcePill = () => {
@@ -1581,7 +1587,7 @@ export function Navbar() {
                 aria-label="Toggle theme"
                 onClick={toggleTheme}
                 tabIndex={menuOpen ? -1 : 0}
-                className="w-9 h-9 flex items-center justify-center rounded-full bg-[color:var(--text-primary)]/5 border border-[color:var(--border)] text-[color:var(--text-primary)] active:scale-90"
+                className="w-9 h-9 flex items-center justify-center rounded-full text-[color:var(--text-primary)] active:scale-90"
                 style={{
                   opacity: menuOpen ? 0 : 1,
                   transform: menuOpen ? "scale(0.6)" : "scale(1)",
@@ -1589,7 +1595,7 @@ export function Navbar() {
                   transition: "opacity .25s ease, transform .35s cubic-bezier(.32,.72,0,1)",
                 }}
               >
-                {mounted ? (resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />) : <Sun size={16} />}
+                <ThemeToggleIcon isDark={mounted ? resolvedTheme === "dark" : true} size={20} />
               </button>
 
               {/* Hamburger <-> X (sits on the right, like the reference's search/close slot mirrored) */}
@@ -1848,11 +1854,7 @@ export function Navbar() {
           }}
         >
           <span className="flex items-center justify-center w-full h-full rounded-full transition-transform duration-200 hover:scale-110 active:scale-90">
-            {mounted ? (
-              resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />
-            ) : (
-              <div className="w-[18px] h-[18px]" />
-            )}
+            <ThemeToggleIcon isDark={mounted ? resolvedTheme === "dark" : true} size={20} />
           </span>
         </button>
       </div>
@@ -1951,7 +1953,7 @@ export function Navbar() {
                   onClick={toggleTheme}
                   className={`${menuRowClass} font-medium opacity-85 hover:opacity-100 active:opacity-60`}
                 >
-                  <ThemeIcon size={20} strokeWidth={1.8} className="shrink-0" />
+                  <ThemeToggleIcon isDark={isDarkNow} size={20} />
                   <span>{isDarkNow ? "Light mode" : "Dark mode"}</span>
                 </button>
               </m.div>

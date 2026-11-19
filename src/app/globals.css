@@ -402,5 +402,17 @@ html.intro-loading .hero-rise-delay {
   padding-right: 0;
 }
 
+html.theme-fade,
+html.theme-fade body,
+html.theme-fade #page-shell,
+html.theme-fade #page-shell * {
+  transition:
+    background-color .17s cubic-bezier(.4, 0, .2, 1),
+    color .17s cubic-bezier(.4, 0, .2, 1),
+    border-color .17s cubic-bezier(.4, 0, .2, 1),
+    fill .17s, stroke .17s !important;
+}
+
+
 
 
