@@ -9,6 +9,7 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PreventZoom } from "@/components/PreventZoom";
+import { Analytics } from '@vercel/analytics/next';
 
 const serif = Instrument_Serif({
   subsets: ["latin"],
@@ -152,6 +153,7 @@ export default function RootLayout({
             </LenisProvider>
           </IntroProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
