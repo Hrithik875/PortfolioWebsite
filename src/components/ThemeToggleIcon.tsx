@@ -56,3 +56,4 @@ export function ThemeToggleIcon({ isDark, size = 20 }: { isDark: boolean; size?:
     </span>
   );
 }
+

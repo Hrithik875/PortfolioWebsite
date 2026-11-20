@@ -142,11 +142,6 @@ export function IntroReveal() {
           });
         };
 
-        // Split text matching index.js exactly
-        splitTextElements(".intro-title h1", "words, chars", true);
-        splitTextElements(".outro-title h1");
-        splitTextElements(".card h1", "words, chars", true);
-
         // Recompute isMobile on load/mount
         const isMobile = window.innerWidth <= 1000;
         const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
@@ -156,13 +151,40 @@ export function IntroReveal() {
         const M_SIZE = (isMobile ? 6 : 14) * rem;
         const H_SIZE = M_SIZE / 2;
 
-        // Base untransformed font size of H in .intro-title h1
-        const H_START_SIZE = (isMobile ? 2.5 : 6) * rem;
-        const H_SCALE = H_SIZE / H_START_SIZE;
-
         // 2. Measure DM Sans 700 with canvas measureText
         const canvas = document.createElement("canvas");
         const ctx = canvas.getContext("2d");
+
+        // Dynamically size "HRITHIK M" on mobile/smaller devices to cover 90% of phone width
+        let introFontSize = (isMobile ? 2.5 : 6) * rem;
+        if (isMobile) {
+          const targetWidth = window.innerWidth * 0.9;
+          let measuredWidth = 0;
+          if (ctx) {
+            ctx.font = `700 100px "DM Sans", sans-serif`;
+            measuredWidth = ctx.measureText("HRITHIK M").width;
+          }
+          const widthRatio = measuredWidth > 0 ? measuredWidth / 100 : 5.1;
+          const idealFontSize = targetWidth / widthRatio;
+          // Set font size to cover 90% of phone width, capped at desktop size (6rem)
+          introFontSize = Math.min(idealFontSize, 6 * rem);
+
+          root.querySelectorAll<HTMLElement>(".intro-title h1").forEach((el) => {
+            el.style.fontSize = `${introFontSize}px`;
+          });
+        }
+
+        // Split text matching index.js exactly
+        splitTextElements(".intro-title h1", "words, chars", true);
+        splitTextElements(".outro-title h1");
+        splitTextElements(".card h1", "words, chars", true);
+
+        // Base untransformed font size of H in .intro-title h1
+        const introTitleH1 = root.querySelector<HTMLElement>(".preloader .intro-title h1");
+        const H_START_SIZE = introTitleH1
+          ? parseFloat(window.getComputedStyle(introTitleH1).fontSize) || introFontSize
+          : introFontSize;
+        const H_SCALE = H_SIZE / H_START_SIZE;
 
         let mWidth = M_SIZE * 0.85;
         let mAscent = M_SIZE * 0.72;
@@ -261,6 +283,10 @@ export function IntroReveal() {
           force3D: true,
         });
 
+        gsap.set(".container", {
+          clipPath: "polygon(0% 49.8%, 0% 49.8%, 0% 50.2%, 0% 50.2%)",
+        });
+
         // SplitText and initial transform states are prepared; reveal typography
         root.classList.add("is-ready");
 
@@ -356,7 +382,7 @@ export function IntroReveal() {
           .to(
             ".container",
             {
-              clipPath: "polygon(0% 48%, 100% 48%, 100% 52%, 0% 52%)",
+              clipPath: "polygon(0% 49.8%, 100% 49.8%, 100% 50.2%, 0% 50.2%)",
               duration: 1,
             },
             5
