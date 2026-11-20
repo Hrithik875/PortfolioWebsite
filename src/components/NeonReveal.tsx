@@ -914,8 +914,12 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     // frame-rate caps (slightly under the target interval to absorb rAF jitter)
     //   reveal: 60fps desktop / 30fps mobile · cut: 30fps · hum: 30fps desktop / 10fps mobile
     const minInterval = revealing ? (s.small ? 30 : 14) : s.phase === "cut" ? 30 : s.small ? 95 : 30;
-    const elapsed = s.last ? now - s.last : 16;
-    if (elapsed < minInterval) {
+    // first frame after a (re)start: draw immediately instead of waiting.
+    // On mobile, minInterval can be 30–95ms so a fake elapsed of 16 would
+    // always fail the throttle check and the loop would reschedule forever.
+    const first = s.last === 0;
+    const elapsed = first ? 16 : now - s.last;
+    if (!first && elapsed < minInterval) {
       s.raf = requestAnimationFrame(loop);
       return;
     }
