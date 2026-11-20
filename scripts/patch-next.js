@@ -102,7 +102,8 @@ const filesToPatch = [
         if (_allMsg.includes('OuterLayoutRouter') || _allMsg.includes('SegmentStateProvider')) {
             return;
         }
-        if (!(0, _isnextroutererror.isNextRouterError)(maybeError)) {`
+        if (!(0, _isnextroutererror.isNextRouterError)(maybeError)) {`,
+        guard: '_allMsg'
       }
     ]
   },
@@ -115,7 +116,8 @@ const filesToPatch = [
         if (_allMsg.includes('OuterLayoutRouter') || _allMsg.includes('SegmentStateProvider')) {
             return;
         }
-        if (!isNextRouterError(maybeError)) {`
+        if (!isNextRouterError(maybeError)) {`,
+        guard: '_allMsg'
       }
     ]
   }
@@ -127,6 +129,8 @@ for (const item of filesToPatch) {
   let content = fs.readFileSync(item.path, 'utf8');
   let modified = false;
   for (const t of item.targets) {
+    if (content.includes(t.replace)) continue;
+    if (t.guard && content.includes(t.guard)) continue;
     if (content.includes(t.find)) {
       content = content.replace(t.find, t.replace);
       modified = true;
