@@ -21,6 +21,7 @@
   height: calc(100% + var(--overlap, 35vh));
   background: rgb(var(--about-rgb, 10, 10, 10));
   will-change: transform;
+  backface-visibility: hidden;
 }
 
 /* Feather = progressive blurred spread that hangs over the hero.
@@ -70,9 +71,17 @@
 .fb2 { --b: 14px; --m0: 20%; --m1: 60%; }
 .fb3 { --b: 32px; --m0: 45%; --m1: 85%; }
 
+/* Backdrop blurs are re-computed every frame while this layer moves over the hero, and three
+   stacked ones are far too heavy for phones / touch devices. One blur layer + the tint keeps the
+   same soft dissolve at a fraction of the GPU cost. */
+@media (max-width: 1023px), (pointer: coarse) {
+  .fb1, .fb3 { display: none; }
+  .fb2 { --b: 12px; --m0: 10%; --m1: 70%; }
+}
+
 /* ── Portrait ──
    position:fixed + a scroll-scrubbed transform = the portrait is NOT part of the page flow, so its
-   motion has exactly one source (a smoothed tween) instead of "page scroll + a correction". */
+   motion has exactly one source (a scrubbed tween) instead of "page scroll + a correction". */
 .imageFixed {
   position: fixed;
   top: 0;
@@ -83,6 +92,7 @@
   pointer-events: none;
 }
 
+/* The wrapper's opacity doubles as the old "page-colour veil" (1 - veil). GSAP animates it. */
 .imageWrap {
   position: absolute;
   top: 0;
@@ -90,9 +100,14 @@
   width: 100%;
   height: var(--img-h, 120vh);
   transform: translate3d(0, 150vh, 0);  /* parked off-screen until GSAP takes over (no flash) */
-  will-change: transform;
+  opacity: calc(1 - var(--veil-from, 0.65));
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
+/* Three identical layers: sharp image (base) + two pre-blurred copies stacked on top.
+   The blur radius of the copies is STATIC; GSAP only cross-fades their opacity (GPU-only),
+   instead of animating a blur filter on a huge layer every scroll frame. */
 .imageClip {
   position: absolute;
   top: 0;
@@ -102,21 +117,27 @@
   overflow: hidden;
   background: rgb(var(--about-rgb, 10, 10, 10));
   border-radius: 14vw 0 0 14vw;          /* same radius top and bottom */
-  will-change: filter;                   /* the blur is applied to the WHOLE shape (edges included), like the reference */
 }
+
+/* Sharp layer starts hidden: the heavy blurred copy is what shows first, and a visible sharp layer
+   under it would leak its crisp edge through the blurred copy's soft edge. GSAP fades it in at the end. */
+.imageSharp {
+  opacity: 0;
+  will-change: opacity;
+}
+
+.blurMid,
+.blurHeavy {
+  pointer-events: none;
+  will-change: opacity;
+}
+/* defaults = the initial (most blurred) state, so there is no flash before JS runs */
+.blurMid   { filter: blur(var(--blur-mid, 14px)); }
+.blurHeavy { filter: blur(var(--blur-heavy, 36px)); }
 
 .image {
   object-fit: cover;
   object-position: 42% 30%;
-}
-
-/* page-colour veil: replaces "brightness" so the reveal also works on a white page */
-.veil {
-  position: absolute;
-  inset: 0;
-  background: rgb(var(--about-rgb, 10, 10, 10));
-  opacity: 0.65;
-  pointer-events: none;
 }
 
 /* ── Text ── */
@@ -139,7 +160,18 @@
 
 .word {
   display: inline-block;
+  /* no permanent will-change: dozens of always-promoted layers is what choked mobile GPUs */
+}
+
+/* GPU layers only exist while a reveal is actually in progress (data-reveal is set from JS) */
+.headline[data-reveal="active"] .word,
+.textBlock[data-reveal="active"] {
   will-change: opacity, filter;
+}
+/* once fully revealed, drop the (identity) blur filter completely → no render surface left behind */
+.headline[data-reveal="done"] .word,
+.textBlock[data-reveal="done"] {
+  filter: none !important;
 }
 
 /* Italic accent. The reference loads a custom font file for this ("other" = Machine.otf), which we can't
@@ -166,7 +198,6 @@
   margin: 13vh 0 0 22.8vw;
   width: 25.4vw;
   min-width: 290px;
-  will-change: opacity, filter;
 }
 
 .paragraph {
@@ -225,8 +256,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .feather { display: none; }
-  .veil { opacity: 0 !important; }
-  .imageClip { filter: none !important; }
+  .blurMid, .blurHeavy { display: none; }
+  .imageSharp { opacity: 1 !important; visibility: visible !important; }
+  .imageWrap { opacity: 1 !important; }
 }
 @media (prefers-reduced-motion: reduce) and (min-width: 1024px) {
   .imageFixed { position: absolute; top: 0; height: 100%; }
