@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -21,7 +21,7 @@ import ClockOverlay from "@/components/ClockOverlay";
 import { ThemeToggleIcon } from "@/components/ThemeToggleIcon";
 import { Logo } from "@/components/Logo";
 import { m, animate, useMotionValue, Variants } from "framer-motion";
-import { useTheme } from "./ThemeProvider";
+import { useTheme, useThemeSwitch } from "./ThemeProvider";
 import { useIntro } from "@/context/IntroContext";
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -564,7 +564,8 @@ export function Navbar() {
   clockOpenRef.current = clockOpen;
   const hiddenShellRef = useRef<HTMLElement | null>(null); // page hidden (not pushed) while the clock is the "current page"
 
-  const { setTheme, resolvedTheme } = useTheme();
+  const { resolvedTheme } = useTheme();
+  const toggleTheme = useThemeSwitch();
   const currentTheme = mounted ? resolvedTheme : "dark";
   const expanded = phase !== "sphere";
   const glassTheme: "dark" | "light" = currentTheme === "light" ? "light" : "dark";
@@ -1076,7 +1077,7 @@ export function Navbar() {
     return () => unsubs.forEach((u) => u());
   }, [introDone, renderLens, LX, RX, LS, LO, H]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     themeNameRef.current = currentTheme === "light" ? "light" : "dark";
     render();
   }, [currentTheme, render, boost]);
@@ -1398,12 +1399,6 @@ export function Navbar() {
     };
   }, [restoreShell]);
 
-  const toggleTheme = () => {
-    const root = document.documentElement;
-    root.classList.add("theme-fade");
-    setTheme(resolvedTheme === "dark" ? "light" : "dark");
-    window.setTimeout(() => root.classList.remove("theme-fade"), 400);
-  };
   const toggleClock = () => setClockOpen((o) => !o);
 
   const forcePill = () => {
@@ -1531,7 +1526,7 @@ export function Navbar() {
           ref={mobileBarRef}
           data-lg={glassTheme}
           className="lg-ink relative pointer-events-auto mx-auto h-14 rounded-full"
-          style={{ color: "var(--text-primary)", transition: "color .3s ease" }}
+          style={{ color: "var(--text-primary)" }}
         >
           {/* Glass layer (never put opacity/filter on an ancestor of this layer) */}
           <div
@@ -1621,7 +1616,7 @@ export function Navbar() {
                       ? "rgba(255,255,255,0.14)"
                       : "rgba(0,0,0,0.08)"
                     : "transparent",
-                  transition: "background-color .35s ease, color .3s ease, transform .2s ease",
+                  transition: "background-color .35s ease, transform .2s ease",
                 }}
               >
                 <Menu

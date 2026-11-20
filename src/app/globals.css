@@ -16,6 +16,7 @@
 
 @layer base {
   :root {
+    color-scheme: dark;
     /* Strict Black & White Design System */
     --background: #000000;
     --foreground: #ffffff;
@@ -52,6 +53,7 @@
   }
 
   [data-theme="light"] {
+    color-scheme: light;
     --background: #ffffff;
     --foreground: #000000;
     --ui-fg: #000000;
@@ -142,7 +144,7 @@ html.intro-loading .hero-rise-delay {
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .glass-panel-hover:hover {
@@ -268,7 +270,6 @@ html.intro-loading .hero-rise-delay {
 
 /* Skills FlowingMenu monochrome logo contrast handling */
 .fm-mono-logo {
-  transition: filter 250ms ease;
   filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.7));
 }
 
@@ -402,17 +403,35 @@ html.intro-loading .hero-rise-delay {
   padding-right: 0;
 }
 
-html.theme-fade,
-html.theme-fade body,
-html.theme-fade #page-shell,
-html.theme-fade #page-shell * {
-  transition:
-    background-color .17s cubic-bezier(.4, 0, .2, 1),
-    color .17s cubic-bezier(.4, 0, .2, 1),
-    border-color .17s cubic-bezier(.4, 0, .2, 1),
-    fill .17s, stroke .17s !important;
+/* ── Atomic theme switch (View Transitions) ────────────────────────────
+   The whole page is snapshotted before/after the theme flips and only the two
+   snapshots are cross-faded (GPU-only). Old stays opaque underneath, new fades
+   in on top: no dip, no per-element colour animation, everything in sync. */
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
 }
 
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
 
+::view-transition-new(root) {
+  animation: theme-fade-in 380ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
 
+@keyframes theme-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

@@ -298,9 +298,10 @@ export default function ClockPanel({
         return;
       }
       if (to === a.to) return;
-      a.from = a.mix;
-      a.to = to;
-      a.start = performance.now();
+      // Snap with the page: the site-wide view transition does the cross-fade.
+      a.from = a.to = a.mix = to;
+      a.start = -1e9;
+      if (panelRef.current) paintTheme(panelRef.current, to);
     };
     sync();
     const mo = new MutationObserver(sync);
