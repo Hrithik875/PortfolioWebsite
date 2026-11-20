@@ -149,11 +149,17 @@
   white-space: nowrap;
 }
 
+/* --outro-offset is written by IntroReveal.tsx: it is the distance from the viewport
+   centre to the "M" inside "HRITHIK M". 10rem is the desktop default. */
 .intro-reveal .outro-title {
   position: absolute;
   top: 50%;
-  left: calc(50% + 10rem);
+  left: calc(50% + var(--outro-offset, 10rem));
   transform: translate(-50%, -50%);
+}
+
+.intro-reveal .outro-title h1 {
+  white-space: nowrap;
 }
 
 .intro-reveal .tag {
@@ -446,17 +452,25 @@
     font-size: 2.5rem;
   }
 
-  .intro-reveal .intro-title h1 {
+  /* The intro title and the sliding "M" must ALWAYS share the same font size
+     (as on desktop, where both are 6rem). JS overrides this with an exact
+     pixel value; this clamp is the no-JS / first-paint fallback. */
+  .intro-reveal .intro-title h1,
+  .intro-reveal .outro-title h1 {
     font-size: clamp(2.5rem, 17.6vw, 6rem);
     white-space: nowrap;
   }
 
-  .intro-reveal .outro-title {
-    left: calc(50% + 4rem);
-  }
+  /* NOTE: the old `.outro-title { left: calc(50% + 4rem) }` override was removed.
+     The M's start position now comes from --outro-offset (set in JS). */
 
   .intro-reveal .card {
-    width: 75%;
+    width: 52%;
+    height: 52%;
+    min-width: 260px;
+    max-width: 400px;
+    min-height: 340px;
+    max-height: 500px;
   }
 
   .intro-reveal .card h1 {
@@ -470,5 +484,27 @@
 
   .intro-reveal footer {
     padding: 1.5em;
+  }
+}
+
+@media (max-width: 640px) {
+  .intro-reveal .card {
+    width: 62%;
+    min-width: 240px;
+    max-width: 285px;
+    height: 46%;
+    min-height: 280px;
+    max-height: min(380px, 72svh);
+  }
+
+  .intro-reveal .card h1 {
+    font-size: 2.15rem;
+    padding: 0 0.5rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .intro-reveal .card h1 {
+    font-size: 1.95rem;
   }
 }

@@ -26,6 +26,8 @@ export interface HalftoneRevealProps {
   reverse?: boolean;
   wander?: boolean;
   clickBurst?: boolean;
+  disableHover?: boolean;
+  disableDrag?: boolean;
   intro?: boolean;
   playIntro?: boolean;
   introDuration?: number;

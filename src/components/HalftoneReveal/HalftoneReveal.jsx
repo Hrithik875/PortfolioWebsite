@@ -361,6 +361,16 @@ const measureEdge = (context, image) => {
   return { matte, plain: clear < count * 0.5 && spread < 0.06 };
 };
 
+const checkIsMobileOrSmall = () => {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.innerWidth <= 1000 ||
+    Boolean(window.matchMedia?.('(max-width: 1000px)').matches) ||
+    Boolean(window.matchMedia?.('(pointer: coarse)').matches) ||
+    Boolean(window.matchMedia?.('(hover: none)').matches)
+  );
+};
+
 const HalftoneReveal = forwardRef(({
   src = DEFAULT_SRC,
   fit = 'cover',
@@ -383,6 +393,8 @@ const HalftoneReveal = forwardRef(({
   reverse = false,
   wander = false,
   clickBurst = true,
+  disableHover,
+  disableDrag,
   intro = true,
   playIntro = true,
   introDuration = 2.2,
@@ -421,6 +433,8 @@ const HalftoneReveal = forwardRef(({
     reverse,
     wander,
     clickBurst,
+    disableHover: disableHover !== undefined ? Boolean(disableHover) : undefined,
+    disableDrag: disableDrag !== undefined ? Boolean(disableDrag) : undefined,
     intro,
     playIntro: Boolean(playIntro),
     introDuration: Math.max(0.1, Number(introDuration) || 2.2)
@@ -531,6 +545,22 @@ const HalftoneReveal = forwardRef(({
     const burstData = new Float32Array(MAX_BURSTS * 4);
     const pointer = { x: 0, y: 0, inside: false, fresh: true, placed: false };
     const brush = { x: 0, y: 0, px: 0, py: 0 };
+    let isPointerDown = false;
+    let downStart = null;
+
+    const shouldDisableHover = () => {
+      if (settingsRef.current.disableHover !== undefined) {
+        return Boolean(settingsRef.current.disableHover);
+      }
+      return checkIsMobileOrSmall();
+    };
+
+    const shouldDisableDrag = () => {
+      if (settingsRef.current.disableDrag !== undefined) {
+        return Boolean(settingsRef.current.disableDrag);
+      }
+      return checkIsMobileOrSmall();
+    };
     const state = {
       width: 1,
       height: 1,
@@ -669,7 +699,7 @@ const HalftoneReveal = forwardRef(({
       gl.uniform1f(viewUniforms.uReverse, s.reverse ? 1 : 0);
       gl.uniform1f(viewUniforms.uIntro, 1 - (1 - intro) * (1 - intro));
       gl.uniform4fv(viewUniforms.uBursts, burstData);
-      gl.uniform1f(viewUniforms.uBurstWidth, Math.max(60, s.revealRadius * 0.9));
+      gl.uniform1f(viewUniforms.uBurstWidth, Math.max(35, Math.min(s.revealRadius * 0.9, state.width * 0.35)));
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.bindVertexArray(null);
@@ -689,7 +719,8 @@ const HalftoneReveal = forwardRef(({
       const dt = last ? Math.min(0.05, Math.max(0, (now - last) / 1000)) : 1 / 60;
       last = now;
 
-      const wandering = s.wander && !reduce;
+      const hoverDisabled = shouldDisableHover();
+      const wandering = s.wander && !reduce && !hoverDisabled;
       let targetX = pointer.x;
       let targetY = pointer.y;
       if (!pointer.inside && wandering) {
@@ -701,7 +732,7 @@ const HalftoneReveal = forwardRef(({
       } else {
         state.drift = 0;
       }
-      const engaged = pointer.inside || wandering;
+      const engaged = (pointer.inside && !hoverDisabled) || wandering;
       state.presence += ((engaged ? 1 : 0) - state.presence) * (1 - Math.exp(-dt / 0.16));
       if (pointer.fresh) {
         brush.x = brush.px = targetX;
@@ -789,7 +820,9 @@ const HalftoneReveal = forwardRef(({
       pointer.y = event.clientY - rect.top;
       pointer.placed = true;
     };
-    const onMove = event => {
+
+    const onEnter = event => {
+      if (shouldDisableHover()) return;
       locatePointer(event);
       if (!pointer.inside) {
         pointer.inside = true;
@@ -797,26 +830,92 @@ const HalftoneReveal = forwardRef(({
       }
       wake();
     };
+
+    const onMove = event => {
+      locatePointer(event);
+      if (isPointerDown) {
+        if (shouldDisableDrag()) return;
+      } else {
+        if (shouldDisableHover()) return;
+      }
+      if (!pointer.inside) {
+        pointer.inside = true;
+        pointer.fresh = true;
+      }
+      wake();
+    };
+
     const onLeave = () => {
+      isPointerDown = false;
+      downStart = null;
       pointer.inside = false;
       wake();
     };
-    const onDown = event => {
-      onMove(event);
-      if (!settingsRef.current.clickBurst || (event.pointerType === 'mouse' && event.button !== 0)) return;
-      bursts.push({ x: pointer.x, y: pointer.y, start: performance.now() });
-      if (bursts.length > MAX_BURSTS) bursts.shift();
+
+    const onCancel = () => {
+      isPointerDown = false;
+      downStart = null;
+      pointer.inside = false;
+      wake();
     };
+
+    const onDown = event => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      locatePointer(event);
+      isPointerDown = true;
+      downStart = { x: pointer.x, y: pointer.y, time: performance.now() };
+
+      const hoverDisabled = shouldDisableHover();
+      const dragDisabled = shouldDisableDrag();
+
+      if (!hoverDisabled && !dragDisabled) {
+        if (!pointer.inside) {
+          pointer.inside = true;
+          pointer.fresh = true;
+        }
+        if (settingsRef.current.clickBurst) {
+          bursts.push({ x: pointer.x, y: pointer.y, start: performance.now() });
+          if (bursts.length > MAX_BURSTS) bursts.shift();
+        }
+        wake();
+      }
+    };
+
+    const onUp = event => {
+      if (!isPointerDown) return;
+      isPointerDown = false;
+
+      const hoverDisabled = shouldDisableHover();
+      const dragDisabled = shouldDisableDrag();
+
+      if (hoverDisabled || dragDisabled) {
+        if (downStart && settingsRef.current.clickBurst) {
+          locatePointer(event);
+          const dist = Math.hypot(pointer.x - downStart.x, pointer.y - downStart.y);
+          if (dist < 20) {
+            bursts.push({ x: downStart.x, y: downStart.y, start: performance.now() });
+            if (bursts.length > MAX_BURSTS) bursts.shift();
+            wake();
+          }
+        }
+        downStart = null;
+        pointer.inside = false;
+      } else {
+        downStart = null;
+      }
+    };
+
     const onVisibility = () => {
       last = 0;
       wake();
     };
 
     container.addEventListener('pointermove', onMove, { passive: true });
-    container.addEventListener('pointerenter', onMove, { passive: true });
+    container.addEventListener('pointerenter', onEnter, { passive: true });
     container.addEventListener('pointerdown', onDown, { passive: true });
+    window.addEventListener('pointerup', onUp, { passive: true });
     container.addEventListener('pointerleave', onLeave, { passive: true });
-    container.addEventListener('pointercancel', onLeave, { passive: true });
+    container.addEventListener('pointercancel', onCancel, { passive: true });
     document.addEventListener('visibilitychange', onVisibility);
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(container);
@@ -849,10 +948,11 @@ const HalftoneReveal = forwardRef(({
       resizeObserver.disconnect();
       intersection.disconnect();
       container.removeEventListener('pointermove', onMove);
-      container.removeEventListener('pointerenter', onMove);
+      container.removeEventListener('pointerenter', onEnter);
       container.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointerup', onUp);
       container.removeEventListener('pointerleave', onLeave);
-      container.removeEventListener('pointercancel', onLeave);
+      container.removeEventListener('pointercancel', onCancel);
       document.removeEventListener('visibilitychange', onVisibility);
       masks.forEach(destroyMask);
       gl.deleteTexture(imageTexture);
@@ -874,7 +974,7 @@ const HalftoneReveal = forwardRef(({
   }, [
     fit, mode, shape, cellSize, angle, dotScale, inkColor, accentColor, paperColor,
     contrast, brightness, invert, roughness, misregistration, revealRadius,
-    softness, linger, reverse, wander, clickBurst
+    softness, linger, reverse, wander, clickBurst, disableHover, disableDrag
   ]);
 
   return (

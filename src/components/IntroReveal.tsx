@@ -91,15 +91,21 @@ export function IntroReveal() {
     }
 
     let isCancelled = false;
-    let ctx: gsap.Context | null = null;
+    let gsapCtx: gsap.Context | null = null;
 
     const runTimeline = async () => {
-      // 1. Wait for document fonts to settle (fast 250ms ceiling so animation starts immediately)
+      // 1. Make sure DM Sans 700 is actually loaded before we measure anything.
+      //    Measuring with a fallback font was the cause of the wrong mobile scaling:
+      //    the canvas width of "HRITHIK M" differs between DM Sans and the fallback.
+      //    Ceiling is 1500ms so a very slow network can't block the intro forever.
       try {
         if (typeof document !== "undefined" && document.fonts) {
           await Promise.race([
-            document.fonts.ready,
-            new Promise((resolve) => setTimeout(resolve, 250)),
+            Promise.all([
+              document.fonts.load('700 100px "DM Sans"', "HRITHIK M"),
+              document.fonts.ready,
+            ]),
+            new Promise((resolve) => setTimeout(resolve, 1500)),
           ]);
         }
       } catch {
@@ -112,7 +118,7 @@ export function IntroReveal() {
       gsap.registerPlugin(CustomEase, SplitText);
       CustomEase.create("hop", ".8, 0, .3, 1");
 
-      ctx = gsap.context(() => {
+      gsapCtx = gsap.context(() => {
         const root = containerRef.current;
         if (!root) return;
 
@@ -153,26 +159,53 @@ export function IntroReveal() {
 
         // 2. Measure DM Sans 700 with canvas measureText
         const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
+        const mctx = canvas.getContext("2d");
 
-        // Dynamically size "HRITHIK M" on mobile/smaller devices to cover 90% of phone width
+        // Starting size of both "HRITHIK M" and the sliding "M" (they MUST match,
+        // exactly like the desktop version where both are 6rem).
         let introFontSize = (isMobile ? 2.5 : 6) * rem;
+
+        // Distance from viewport center to the centre of the "M" inside "HRITHIK M".
+        // The sliding outro "M" starts exactly on top of that letter.
+        let outroOffsetPx = 10 * rem; // desktop value (matches the CSS default of 10rem)
+
+        // Width of the sliding "M" at its START size (mobile only, used for clearance maths)
+        let mStartWidth = 0;
+
         if (isMobile) {
           const targetWidth = window.innerWidth * 0.9;
-          let measuredWidth = 0;
-          if (ctx) {
-            ctx.font = `700 100px "DM Sans", sans-serif`;
-            measuredWidth = ctx.measureText("HRITHIK M").width;
+          let fullWidthRatio = 5.1; // fallback: advance width of "HRITHIK M" per 1px font-size
+          let mWidthRatio = 0.85; // fallback: advance width of "M" per 1px font-size
+
+          if (mctx) {
+            mctx.font = `700 100px "DM Sans", sans-serif`;
+            const full = mctx.measureText("HRITHIK M").width;
+            const m = mctx.measureText("M").width;
+            if (full > 0) fullWidthRatio = full / 100;
+            if (m > 0) mWidthRatio = m / 100;
           }
-          const widthRatio = measuredWidth > 0 ? measuredWidth / 100 : 5.1;
-          const idealFontSize = targetWidth / widthRatio;
-          // Set font size to cover 90% of phone width, capped at desktop size (6rem)
+
+          // Cover 90% of phone width, capped at desktop intro size (6rem) for tablets
+          const idealFontSize = targetWidth / fullWidthRatio;
           introFontSize = Math.min(idealFontSize, 6 * rem);
 
-          root.querySelectorAll<HTMLElement>(".intro-title h1").forEach((el) => {
-            el.style.fontSize = `${introFontSize}px`;
-          });
+          // Where the "M" of "HRITHIK M" sits relative to the viewport centre
+          const titleWidth = fullWidthRatio * introFontSize;
+          const mWidthAtIntro = mWidthRatio * introFontSize;
+          outroOffsetPx = titleWidth / 2 - mWidthAtIntro / 2;
+          mStartWidth = mWidthAtIntro;
+
+          // IMPORTANT: size BOTH the intro title and the sliding M identically.
+          // Previously only .intro-title h1 was resized, so the M stayed at 2.5rem.
+          root
+            .querySelectorAll<HTMLElement>(".intro-title h1, .outro-title h1")
+            .forEach((el) => {
+              el.style.fontSize = `${introFontSize}px`;
+            });
         }
+
+        // Drive the outro M start position from JS (CSS reads --outro-offset)
+        root.style.setProperty("--outro-offset", `${outroOffsetPx}px`);
 
         // Split text matching index.js exactly
         splitTextElements(".intro-title h1", "words, chars", true);
@@ -188,39 +221,33 @@ export function IntroReveal() {
 
         let mWidth = M_SIZE * 0.85;
         let mAscent = M_SIZE * 0.72;
-        let mFontAscent = M_SIZE * 0.85;
 
         let hWidth = H_SIZE * 0.72;
-        let hAscent = H_SIZE * 0.72;
-        let hFontAscent = H_SIZE * 0.85;
 
         // In DM Sans Bold (700), stem thickness is ~11.5% of font size
         let mStemThickness = M_SIZE * 0.115;
 
-        if (ctx) {
-          ctx.font = `700 ${M_SIZE}px "DM Sans", sans-serif`;
-          const mMetrics = ctx.measureText("M");
+        if (mctx) {
+          mctx.font = `700 ${M_SIZE}px "DM Sans", sans-serif`;
+          const mMetrics = mctx.measureText("M");
           mWidth = mMetrics.width;
           mAscent = mMetrics.actualBoundingBoxAscent;
-          mFontAscent = mMetrics.fontBoundingBoxAscent || mAscent;
 
-          ctx.font = `700 ${H_SIZE}px "DM Sans", sans-serif`;
-          const hMetrics = ctx.measureText("H");
+          mctx.font = `700 ${H_SIZE}px "DM Sans", sans-serif`;
+          const hMetrics = mctx.measureText("H");
           hWidth = hMetrics.width;
-          hAscent = hMetrics.actualBoundingBoxAscent;
-          hFontAscent = hMetrics.fontBoundingBoxAscent || hAscent;
 
           // Measure DM Sans 700 'M' stem thickness directly via offscreen canvas
           try {
             const cSize = Math.ceil(M_SIZE);
             canvas.width = cSize;
             canvas.height = cSize;
-            ctx.font = `700 ${M_SIZE}px "DM Sans", sans-serif`;
-            ctx.fillStyle = "black";
-            ctx.textBaseline = "top";
-            ctx.fillText("M", 0, 0);
+            mctx.font = `700 ${M_SIZE}px "DM Sans", sans-serif`;
+            mctx.fillStyle = "black";
+            mctx.textBaseline = "top";
+            mctx.fillText("M", 0, 0);
 
-            const imgData = ctx.getImageData(0, 0, cSize, cSize);
+            const imgData = mctx.getImageData(0, 0, cSize, cSize);
             const sampleY = Math.floor(mAscent * 0.5);
             let startX = -1;
             let endX = -1;
@@ -251,9 +278,8 @@ export function IntroReveal() {
         const targetMLeft = lockupLeft + hWidth + gap;
 
         // M's horizontal center is invariant under font-size scaling because .outro-title is centered on its position
-        const outroOffsetRem = isMobile ? 4 : 10;
         const targetMCenter = targetMLeft + mWidth / 2;
-        const naturalMCenter = window.innerWidth / 2 + outroOffsetRem * rem;
+        const naturalMCenter = window.innerWidth / 2 + outroOffsetPx;
         const finalX_M = targetMCenter - naturalMCenter;
 
         // Measure H's natural untransformed position
@@ -272,7 +298,24 @@ export function IntroReveal() {
 
         // Keep existing pull-apart movement (+3rem on desktop, +1rem on mobile)
         const pullApartDelta = (isMobile ? 1.0 : 3.0) * rem;
-        const pullApartX_H = finalX_H + pullApartDelta;
+        let pullApartX_H = finalX_H + pullApartDelta;
+
+        // MOBILE / SMALL DEVICES ONLY: keep H and M from overlapping while they slide.
+        // On a phone the final lockup is narrow, so the pulled-apart H (still at its large
+        // start size) would land on top of the M (still near its start size). We clamp the
+        // pull-apart position so H's right edge always stays left of M's left edge by a
+        // clearance. Because H and M tween with the same ease and duration, a positive gap
+        // at the start and at the end of each tween guarantees a positive gap throughout.
+        // Desktop keeps the original behaviour untouched.
+        if (isMobile && mStartWidth > 0) {
+          const hStartWidth = hRect && hRect.width > 0 ? hRect.width : H_START_SIZE * 0.72;
+          const clearance = 0.75 * rem;
+          // M's left edge once it has slid to its target centre, still at its start size
+          const mLeftAtPull = targetMCenter - mStartWidth / 2;
+          // H's right edge must stay left of that
+          const maxPullX = mLeftAtPull - clearance - hStartWidth - hNaturalLeft;
+          pullApartX_H = Math.min(pullApartX_H, maxPullX);
+        }
 
         // Initial positions for split-overlay (bottom half of M)
         gsap.set(".split-overlay .outro-title .char span", { y: "0%" });
@@ -461,9 +504,10 @@ export function IntroReveal() {
       isCancelled = true;
       if (container) {
         container.classList.remove("is-ready");
+        container.style.removeProperty("--outro-offset");
       }
-      if (ctx) {
-        ctx.revert();
+      if (gsapCtx) {
+        gsapCtx.revert();
       }
     };
   }, [introDone, shouldRunIntro, setIntroDone, isFinished]);
