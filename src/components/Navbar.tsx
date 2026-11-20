@@ -470,22 +470,21 @@ const MENU_ICONS: Record<string, LucideIcon> = {
   About: User,
 };
 
-/* Mobile menu items: they slide in from the RIGHT with a stagger and slide back out fast. */
-const menuItemVariants: Variants = {
-  hidden: {
-    opacity: 0,
-    x: 72,
-    transition: { duration: 0.22, ease: "easeIn" },
-  },
-  visible: (i: number) => ({
-    opacity: 1,
-    x: 0,
-    transition: { delay: 0.14 + i * 0.045, duration: 0.5, ease: MENU_EASE },
-  }),
+/* Mobile menu items: pure CSS transitions (transform + opacity only) so they run on the
+   compositor thread and are never blocked by JS. Same timing as before. */
+const menuItemStyle = (open: boolean, i: number): React.CSSProperties => {
+  const delay = 0.14 + i * 0.045;
+  return {
+    opacity: open ? 1 : 0,
+    transform: open ? "translate3d(0,0,0)" : "translate3d(72px,0,0)",
+    transition: open
+      ? `opacity .5s cubic-bezier(.32,.72,0,1) ${delay}s, transform .5s cubic-bezier(.32,.72,0,1) ${delay}s`
+      : "opacity .22s ease-in, transform .22s ease-in",
+  };
 };
 
 const menuRowClass =
-  "flex flex-row-reverse items-center gap-4 py-2.5 px-4 rounded-full text-[15px] tracking-tight whitespace-nowrap text-[color:var(--text-primary)] transition-all";
+  "lg-noink flex flex-row-reverse items-center gap-4 py-2.5 px-4 rounded-full text-[15px] tracking-tight whitespace-nowrap text-[color:var(--text-primary)] transition-opacity";
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
@@ -497,7 +496,6 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const CLOCK_ACCENT = "#ff4d00";
 
 function LiveClockIcon({ size = 20 }: { size?: number }) {
-  // total minutes since midnight; null until mounted
   const [mins, setMins] = useState<number | null>(null);
 
   useEffect(() => {
@@ -508,7 +506,7 @@ function LiveClockIcon({ size = 20 }: { size?: number }) {
     setMins(read());
     const id = setInterval(() => {
       const next = read();
-      setMins((prev) => (prev === next ? prev : next)); // only re-render when the minute changes
+      setMins((prev) => (prev === next ? prev : next));
     }, 1000);
     return () => clearInterval(id);
   }, []);
@@ -516,12 +514,12 @@ function LiveClockIcon({ size = 20 }: { size?: number }) {
   const total = mins ?? 0;
   const minute = total % 60;
   const hour = Math.floor(total / 60) % 12;
-  const minuteDeg = minute * 6; // 360 / 60
-  const hourDeg = hour * 30 + minute * 0.5; // 360 / 12, plus drift within the hour
+  const minuteDeg = minute * 6;
+  const hourDeg = hour * 30 + minute * 0.5;
 
   const handStyle = (deg: number): React.CSSProperties => ({
     transform: `rotate(${deg}deg)`,
-    transformOrigin: "10.5px 10.5px",
+    transformOrigin: "10px 10px",
     transformBox: "view-box",
     transition: "transform .6s cubic-bezier(.32,.72,0,1)",
   });
@@ -530,19 +528,20 @@ function LiveClockIcon({ size = 20 }: { size?: number }) {
     <svg
       width={size}
       height={size}
-      viewBox="0 0 21 21"
+      viewBox="0 0 20 20"          /* 1 unit = 1px when size=20 -> crisp */
       fill="none"
       aria-hidden="true"
-      style={{ opacity: mins === null ? 0.6 : 1, transition: "opacity .3s ease" }}
+      shapeRendering="geometricPrecision"
+      style={{ overflow: "visible", opacity: mins === null ? 0.6 : 1, transition: "opacity .3s ease" }}
     >
-      {/* ring */}
-      <circle cx="10.5" cy="10.5" r="10" stroke="var(--text-primary)" strokeWidth="1.75" />
-      {/* minute hand (long) */}
-      <path d="M10.5 10.5V3.43" stroke="var(--text-primary)" strokeWidth="1.75" style={handStyle(minuteDeg)} />
-      {/* hour hand (short, accent colour) */}
-      <path d="M10.5 10.5V4.5" stroke={CLOCK_ACCENT} strokeWidth="1.75" style={handStyle(hourDeg)} />
+      {/* ring: r + stroke/2 = 8.25 + 0.75 = 9 -> 1 unit of padding on every side */}
+      <circle cx="10" cy="10" r="8.25" stroke="var(--text-primary)" strokeWidth="1.5" />
+      {/* minute hand */}
+      <path d="M10 10V4.5" stroke="var(--text-primary)" strokeWidth="1.5" strokeLinecap="round" style={handStyle(minuteDeg)} />
+      {/* hour hand (accent) */}
+      <path d="M10 10V6.25" stroke={CLOCK_ACCENT} strokeWidth="1.5" strokeLinecap="round" style={handStyle(hourDeg)} />
       {/* centre dot */}
-      <circle cx="10.5" cy="10.5" r="0.75" fill="var(--text-primary)" />
+      <circle cx="10" cy="10" r="1" fill="var(--text-primary)" />
     </svg>
   );
 }
@@ -904,7 +903,7 @@ export function Navbar() {
       el.style.zIndex = "45"; // above the green layer (z-40), below the header (z-50)
       el.style.backgroundColor = "var(--background)";
       el.style.touchAction = "none";
-      el.style.willChange = "transform, clip-path";
+      el.style.willChange = "transform";
       shellRef.current = el;
 
       // Transparent blocker overlay: intercepts all clicks/touches so page contents cannot be interacted with
@@ -1026,6 +1025,7 @@ export function Navbar() {
     const el = mobileBarRef.current;
     if (!el) return;
     const build = () => {
+      if (shellActiveRef.current) return; // menu animating: don't re-encode PNGs / swap the SVG filter now
       const w = el.offsetWidth;
       const h = el.offsetHeight;
       if (!w || !h) return;
@@ -1294,14 +1294,19 @@ export function Navbar() {
   /* ── Mobile menu: open / close animation ── */
   useEffect(() => {
     const fast = reduceRef.current;
+    let raf = 0;
     if (isMobileMenuOpen) {
-      prepareShell();
+      prepareShell(); // layout reads, scroll lock, layer promotion
       applyShell(MENU_P.get());
       menuCtl.current?.stop();
-      menuCtl.current = animate(MENU_P, 1, {
-        duration: fast ? 0.01 : MENU_OPEN_S,
-        ease: MENU_EASE,
-      } as never) as Controls;
+      // Begin on the NEXT frame: the browser first paints the prepared + promoted page layer,
+      // so the first animation frames don't also pay for layout, promotion and rasterisation.
+      raf = requestAnimationFrame(() => {
+        menuCtl.current = animate(MENU_P, 1, {
+          duration: fast ? 0.01 : MENU_OPEN_S,
+          ease: MENU_EASE,
+        } as never) as Controls;
+      });
     } else if (shellActiveRef.current) {
       menuCtl.current?.stop();
       menuCtl.current = animate(MENU_P, 0, {
@@ -1314,6 +1319,7 @@ export function Navbar() {
         },
       } as never) as Controls;
     }
+    return () => cancelAnimationFrame(raf);
   }, [isMobileMenuOpen, MENU_P, prepareShell, applyShell, restoreShell]);
 
   /* Tapping the shrunken page closes the menu (like in the reference) */
@@ -1454,7 +1460,6 @@ export function Navbar() {
   const menuBg = glassTheme === "dark" ? MENU_BG_DARK : MENU_BG_LIGHT;
 
   const menuOpen = isMobileMenuOpen;
-  const itemState = menuOpen ? "visible" : "hidden";
   const isDarkNow = currentTheme === "dark";
   const ThemeIcon = isDarkNow ? Sun : Moon;
   const showClockBtn = !CLOCK_ROUTES || CLOCK_ROUTES.includes(pathname);
@@ -1537,8 +1542,11 @@ export function Navbar() {
               backgroundImage: scrim,
               backdropFilter: mobBackdrop,
               WebkitBackdropFilter: mobBackdrop,
-              opacity: glassReady && !menuOpen ? 1 : 0,
-              transition: GLASS_FADE,
+              opacity: glassReady && !menuMounted ? 1 : 0,
+              visibility: menuMounted ? "hidden" : "visible",
+              transition: menuMounted
+                ? "opacity .12s linear, visibility 0s linear .12s"
+                : `${GLASS_FADE}, visibility 0s`,
             }}
           />
 
@@ -1564,11 +1572,11 @@ export function Navbar() {
                   aria-pressed={clockOpen}
                   onClick={toggleClock}
                   tabIndex={menuOpen ? -1 : 0}
-                  className="w-9 h-9 flex items-center justify-center rounded-full border border-[color:var(--border)] text-[color:var(--text-primary)] active:scale-90"
+                  className="w-9 h-9 flex items-center justify-center rounded-full text-[color:var(--text-primary)] active:scale-90"
                   style={{
                     backgroundColor: clockOpen
-                      ? "color-mix(in srgb, var(--text-primary) 14%, transparent)"
-                      : "color-mix(in srgb, var(--text-primary) 5%, transparent)",
+                      ? "color-mix(in srgb, var(--text-primary) 10%, transparent)"
+                      : "transparent",
                     opacity: menuOpen ? 0 : 1,
                     transform: menuOpen ? "scale(0.6)" : "scale(1)",
                     pointerEvents: menuOpen ? "none" : "auto",
@@ -1861,106 +1869,98 @@ export function Navbar() {
 
       {/* ═══ Mobile menu: frosted liquid glass layer that sits BEHIND the shrinking page.
           Items are right-aligned (mirror of the reference) and slide in from the right. ═══ */}
-      {menuMounted && (
-        <div
-          ref={menuLayerRef}
-          data-lg={glassTheme}
-          className="lg-ink fixed inset-0 z-40 min-[1009px]:hidden overflow-hidden"
-          style={{
-            opacity: 0,
-            background: menuBg,
-            backdropFilter: "blur(28px) saturate(180%)",
-            WebkitBackdropFilter: "blur(28px) saturate(180%)",
-            borderLeft: glassTheme === "dark" ? "1px solid rgba(255, 255, 255, 0.12)" : "1px solid rgba(0, 0, 0, 0.08)",
-            boxShadow:
-              glassTheme === "dark"
-                ? "inset 1px 0 0 rgba(255,255,255,0.1), inset 0 1px 0 rgba(255,255,255,0.15)"
-                : "inset 1px 0 0 rgba(255,255,255,0.6), inset 0 1px 0 rgba(255,255,255,0.8)",
-            touchAction: "none",
-          }}
-          aria-hidden={!menuOpen}
+      <div
+        ref={menuLayerRef}
+        data-lg={glassTheme}
+        className="lg-ink fixed inset-0 z-40 min-[1009px]:hidden overflow-hidden"
+        style={{
+          opacity: 0,
+          visibility: menuMounted ? "visible" : "hidden",
+          willChange: "opacity",
+          background: menuBg,
+          borderLeft: glassTheme === "dark" ? "1px solid rgba(255, 255, 255, 0.12)" : "1px solid rgba(0, 0, 0, 0.08)",
+          boxShadow:
+            glassTheme === "dark"
+              ? "inset 1px 0 0 rgba(255,255,255,0.1), inset 0 1px 0 rgba(255,255,255,0.15)"
+              : "inset 1px 0 0 rgba(255,255,255,0.6), inset 0 1px 0 rgba(255,255,255,0.8)",
+          touchAction: "none",
+        }}
+        aria-hidden={!menuOpen}
+      >
+        <nav
+          ref={menuNavRef}
+          aria-label="Mobile navigation"
+          className="absolute inset-0 flex flex-col items-end pr-7"
+          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 112px)" }}
         >
-          <nav
-            ref={menuNavRef}
-            aria-label="Mobile navigation"
-            className="absolute inset-0 flex flex-col items-end pr-7"
-            style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 112px)" }}
-          >
-            {/* Group 1: main pages */}
-            <div className="flex flex-col items-end">
-              {navLinks.map((link, i) => {
-                const Icon = MENU_ICONS[link.name];
-                const isActive = pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href));
-                return (
-                  <m.div
-                    key={link.name}
-                    custom={i}
-                    variants={menuItemVariants}
-                    initial="hidden"
-                    animate={itemState}
+          {/* Group 1: main pages */}
+          <div className="flex flex-col items-end">
+            {navLinks.map((link, i) => {
+              const Icon = MENU_ICONS[link.name];
+              const isActive = pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href));
+              return (
+                <div key={link.name} style={menuItemStyle(menuOpen, i)}>
+                  <Link
+                    href={link.href}
+                    tabIndex={menuOpen ? 0 : -1}
+                    onClick={(e) => handleNavClick(e, link.href)}
+                    className={`${menuRowClass} ${
+                      isActive
+                        ? "font-bold bg-[color:var(--text-primary)]/10 border border-[color:var(--border)] shadow-sm"
+                        : "font-medium opacity-85 hover:opacity-100"
+                    }`}
                   >
-                    <Link
-                      href={link.href}
-                      tabIndex={menuOpen ? 0 : -1}
-                      onClick={(e) => handleNavClick(e, link.href)}
-                      className={`${menuRowClass} ${
-                        isActive
-                          ? "font-bold bg-[color:var(--text-primary)]/10 border border-[color:var(--border)] shadow-sm"
-                          : "font-medium opacity-85 hover:opacity-100"
-                      }`}
-                    >
-                      <Icon size={20} strokeWidth={1.8} className="shrink-0" />
-                      <span>{link.name}</span>
-                    </Link>
-                  </m.div>
-                );
-              })}
-            </div>
+                    <Icon size={20} strokeWidth={1.8} className="shrink-0" />
+                    <span>{link.name}</span>
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
 
-            {/* Group 2: Resume + Contact */}
-            <div className="mt-6 flex flex-col items-end">
-              <m.div custom={navLinks.length} variants={menuItemVariants} initial="hidden" animate={itemState}>
-                <Link
-                  href="/resume"
-                  tabIndex={menuOpen ? 0 : -1}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`${menuRowClass} font-medium opacity-85 hover:opacity-100 active:opacity-60`}
-                >
-                  <FileText size={20} strokeWidth={1.8} className="shrink-0" />
-                  <span>Resume</span>
-                </Link>
-              </m.div>
-              <m.div custom={navLinks.length + 1} variants={menuItemVariants} initial="hidden" animate={itemState}>
-                <Link
-                  href="/contact"
-                  tabIndex={menuOpen ? 0 : -1}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`${menuRowClass} font-medium opacity-85 hover:opacity-100 active:opacity-60`}
-                >
-                  <Mail size={20} strokeWidth={1.8} className="shrink-0" />
-                  <span>Contact</span>
-                </Link>
-              </m.div>
+          {/* Group 2: Resume + Contact */}
+          <div className="mt-6 flex flex-col items-end">
+            <div style={menuItemStyle(menuOpen, navLinks.length)}>
+              <Link
+                href="/resume"
+                tabIndex={menuOpen ? 0 : -1}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`${menuRowClass} font-medium opacity-85 hover:opacity-100 active:opacity-60`}
+              >
+                <FileText size={20} strokeWidth={1.8} className="shrink-0" />
+                <span>Resume</span>
+              </Link>
             </div>
+            <div style={menuItemStyle(menuOpen, navLinks.length + 1)}>
+              <Link
+                href="/contact"
+                tabIndex={menuOpen ? 0 : -1}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`${menuRowClass} font-medium opacity-85 hover:opacity-100 active:opacity-60`}
+              >
+                <Mail size={20} strokeWidth={1.8} className="shrink-0" />
+                <span>Contact</span>
+              </Link>
+            </div>
+          </div>
 
-            {/* Group 3: theme toggle (takes the place of "Logout" in the reference) */}
-            <div className="mt-6 flex flex-col items-end">
-              <m.div custom={navLinks.length + 2} variants={menuItemVariants} initial="hidden" animate={itemState}>
-                <button
-                  type="button"
-                  suppressHydrationWarning
-                  tabIndex={menuOpen ? 0 : -1}
-                  onClick={toggleTheme}
-                  className={`${menuRowClass} font-medium opacity-85 hover:opacity-100 active:opacity-60`}
-                >
-                  <ThemeToggleIcon isDark={isDarkNow} size={20} />
-                  <span>{isDarkNow ? "Light mode" : "Dark mode"}</span>
-                </button>
-              </m.div>
+          {/* Group 3: theme toggle (takes the place of "Logout" in the reference) */}
+          <div className="mt-6 flex flex-col items-end">
+            <div style={menuItemStyle(menuOpen, navLinks.length + 2)}>
+              <button
+                type="button"
+                suppressHydrationWarning
+                tabIndex={menuOpen ? 0 : -1}
+                onClick={toggleTheme}
+                className={`${menuRowClass} font-medium opacity-85 hover:opacity-100 active:opacity-60`}
+              >
+                <ThemeToggleIcon isDark={isDarkNow} size={20} />
+                <span>{isDarkNow ? "Light mode" : "Dark mode"}</span>
+              </button>
             </div>
-          </nav>
-        </div>
-      )}
+          </div>
+        </nav>
+      </div>
     </>
   );
 }
