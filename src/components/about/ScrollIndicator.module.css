@@ -8,6 +8,8 @@
   pointer-events: none;
   font-variant-numeric: tabular-nums;
   color: rgb(var(--about-fg, 240, 240, 240));
+  /* the text changes on scroll; keep its repaint isolated from the rest of the page */
+  contain: layout paint style;
 }
 
 @media (max-width: 1023px) {
