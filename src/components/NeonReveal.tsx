@@ -32,6 +32,7 @@ import React, {
   forwardRef,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useImperativeHandle,
   useRef,
   type CSSProperties,
@@ -1114,8 +1115,8 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger]);
 
-  /* Re-render when props change (theme switches etc.). Works even when the loop is idle. */
-  useEffect(() => {
+  /* Re-render synchronously when props change (theme switches etc.). Works even when the loop is idle. */
+  useLayoutEffect(() => {
     resizeRef.current?.(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [

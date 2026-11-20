@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useLayoutEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 
 const DEFAULT_SRC = 'https://images.unsplash.com/photo-1693250707557-a846a014b321?q=80&w=1400&auto=format&fit=crop';
 
@@ -969,7 +969,7 @@ const HalftoneReveal = forwardRef(({
     }
   }, [playIntro]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     wakeRef.current?.();
   }, [
     fit, mode, shape, cellSize, angle, dotScale, inkColor, accentColor, paperColor,

@@ -48,7 +48,6 @@
   /* overflow: visible so the About section's feather/blur can overlay the hero seamlessly */
   overflow: visible;
   background-color: var(--background);
-  transition: background-color 0.6s ease;
 }
 
 .intro-reveal img {
@@ -290,12 +289,10 @@
    Invert colors: white becomes black and black becomes white */
 .intro-reveal .container .hero-img .hero-shape-black {
   fill: #ffffff;
-  transition: fill 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .intro-reveal .container .hero-img .hero-shape-white {
   fill: #000000;
-  transition: fill 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* In Light mode:
@@ -319,7 +316,6 @@
   align-items: center;
   color: var(--text-primary);
   z-index: 3;
-  transition: color 0.6s ease;
 }
 
 .intro-reveal .scroll-down-btn {
@@ -332,7 +328,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  transition: opacity 0.2s ease, color 0.6s ease;
+  transition: opacity 0.2s ease;
 }
 
 .intro-reveal .scroll-down-btn:hover {
@@ -352,7 +348,6 @@
   background-color: var(--surface);
   color: var(--primary);
   clip-path: polygon(0% 50%, 100% 50%, 100% 50%, 0% 50%);
-  transition: background-color 0.6s ease, color 0.6s ease;
   will-change: transform;
   z-index: 3;
 }
@@ -390,7 +385,6 @@
   font-size: clamp(2rem, 3.5vw, 3rem);
   white-space: nowrap;
   color: var(--primary);
-  transition: color 0.6s ease;
   z-index: 1;
   pointer-events: none;
   margin: 0;
