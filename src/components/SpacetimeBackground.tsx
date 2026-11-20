@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef } from "react";
 import { useTheme } from "./ThemeProvider";
 
 declare global {
@@ -94,8 +94,8 @@ export function SpacetimeBackground() {
     return Boolean(isCoarse || isNarrow || isLowCpu || isLowMem);
   };
 
-  // Sync theme whenever resolvedTheme updates from next-themes
-  useEffect(() => {
+  // Sync theme synchronously whenever resolvedTheme updates from next-themes
+  useLayoutEffect(() => {
     if (isBgOff) return;
     const currentMode = resolvedTheme === "light" ? "light" : "dark";
     window.__currentSpacetimeTheme = currentMode;

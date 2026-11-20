@@ -147,23 +147,15 @@ window.setSpacetimeTheme = function(mode) {
         return;
     }
 
-    // Smooth 0.4s transition on theme toggle
-    TweenMax.to(clearColorObj, 0.4, {
-        r: targetBg.r,
-        g: targetBg.g,
-        b: targetBg.b,
-        ease: Power1.easeOut,
-        onUpdate: function() {
-            renderer.setClearColor(clearColorObj);
-        }
-    });
-
-    TweenMax.to(dotColorObj, 0.4, {
-        r: targetDot.r,
-        g: targetDot.g,
-        b: targetDot.b,
-        ease: Power1.easeOut
-    });
+    // Snap immediately: view transitions handles the cross-fade across the whole page
+    if (typeof TweenMax !== 'undefined') {
+        TweenMax.killTweensOf(clearColorObj);
+        TweenMax.killTweensOf(dotColorObj);
+    }
+    clearColorObj.copy(targetBg);
+    dotColorObj.copy(targetDot);
+    renderer.setClearColor(clearColorObj);
+    renderer.render(scene, camera);
 };
 
 // 4. Visibility pause & Reduced motion pause:

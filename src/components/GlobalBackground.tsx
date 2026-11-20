@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { useTheme } from "./ThemeProvider";
 
@@ -90,6 +90,9 @@ export function GlobalBackground() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const shaderMaterialRef = useRef<THREE.ShaderMaterial | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const { theme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -99,13 +102,16 @@ export function GlobalBackground() {
     setMounted(true);
   }, []);
 
-  // Smoothly update dot color when theme changes without re-creating WebGL context
-  useEffect(() => {
+  // Synchronously update dot color and redraw on theme change
+  useLayoutEffect(() => {
     if (!shaderMaterialRef.current) return;
     const dotColor = isDark
       ? new THREE.Vector4(1.0, 1.0, 1.0, 0.8)
       : new THREE.Vector4(0.06, 0.18, 0.36, 0.6);
     shaderMaterialRef.current.uniforms.u_dotColor.value = dotColor;
+    if (rendererRef.current && sceneRef.current && cameraRef.current) {
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
+    }
   }, [isDark]);
 
   useEffect(() => {
@@ -139,6 +145,9 @@ export function GlobalBackground() {
       renderer.setClearColor(0x000000, 0);
 
       scene = new THREE.Scene();
+      rendererRef.current = renderer;
+      sceneRef.current = scene;
+      cameraRef.current = camera;
 
       camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 2000);
       const isMobile = width < 768;
@@ -322,6 +331,9 @@ export function GlobalBackground() {
         fallbackTex?.dispose();
         loadedTex?.dispose();
         renderer?.dispose();
+        rendererRef.current = null;
+        sceneRef.current = null;
+        cameraRef.current = null;
       };
     } catch (err) {
       console.error("WebGL Spacetime background initialization failed:", err);
@@ -332,7 +344,7 @@ export function GlobalBackground() {
     <div
       ref={containerRef}
       aria-hidden="true"
-      className="fixed inset-0 pointer-events-none z-[-1] w-full h-full overflow-hidden transition-colors duration-500"
+      className="fixed inset-0 pointer-events-none z-[-1] w-full h-full overflow-hidden"
       style={{
         backgroundColor: mounted
           ? isDark
