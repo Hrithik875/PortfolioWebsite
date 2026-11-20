@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { m, MotionValue } from 'framer-motion';
 import Link from 'next/link';
 import { ArrowRight, Mail, ArrowUpRight } from 'lucide-react';
@@ -19,40 +19,70 @@ type DottedSurfaceProps = {
 };
 
 export function DottedSurface({ className }: DottedSurfaceProps) {
-    const { theme } = useTheme();
+    const { resolvedTheme } = useTheme();
     const containerRef = useRef<HTMLDivElement>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rendererRef = useRef<any>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sceneRef = useRef<any>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cameraRef = useRef<any>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const geometryRef = useRef<any>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const threeRef = useRef<any>(null);
+
+    // Synchronously update colors on theme change
+    useLayoutEffect(() => {
+        if (!rendererRef.current || !geometryRef.current || !threeRef.current) return;
+        const isDark = (resolvedTheme || "dark") === "dark";
+        const bgColor = isDark ? 0xffffff : 0x000000;
+        rendererRef.current.setClearColor(bgColor, 1);
+        const dotColor = isDark
+            ? new threeRef.current.Color(0, 0, 0)
+            : new threeRef.current.Color(1, 1, 1);
+        const colors = geometryRef.current.attributes.color.array as Float32Array;
+        for (let i = 0; i < colors.length; i += 3) {
+            colors[i]     = dotColor.r;
+            colors[i + 1] = dotColor.g;
+            colors[i + 2] = dotColor.b;
+        }
+        geometryRef.current.attributes.color.needsUpdate = true;
+        if (sceneRef.current && cameraRef.current) {
+            rendererRef.current.render(sceneRef.current, cameraRef.current);
+        }
+    }, [resolvedTheme]);
 
     useEffect(() => {
         const container = containerRef.current;
         if (!container) return;
 
         let animationId = 0;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let renderer: any = null;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let geometry: any = null;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let material: any = null;
         let cancelled = false;
 
         const init = async () => {
             if (window.innerWidth < 768) return;
             const THREE = await import("three");
             if (cancelled || !container) return;
+            threeRef.current = THREE;
 
             const SEPARATION = 140;
             const AMOUNTX = 50;
             const AMOUNTY = 50;
 
             const scene = new THREE.Scene();
+            sceneRef.current = scene;
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
             camera.position.set(0, 300, 1000);
+            cameraRef.current = camera;
 
-            renderer = new THREE.WebGLRenderer({ alpha: false, antialias: true });
+            const renderer = new THREE.WebGLRenderer({ alpha: false, antialias: true });
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
             renderer.setSize(container.offsetWidth, container.offsetHeight);
+            rendererRef.current = renderer;
 
-            const bgColor = theme === 'dark' ? 0xffffff : 0x000000;
+            const isDark = (resolvedTheme || "dark") === "dark";
+            const bgColor = isDark ? 0xffffff : 0x000000;
             renderer.setClearColor(bgColor, 1);
             container.appendChild(renderer.domElement);
 
@@ -60,7 +90,7 @@ export function DottedSurface({ className }: DottedSurfaceProps) {
             const positions = new Float32Array(numParticles * 3);
             const colors = new Float32Array(numParticles * 3);
 
-            const dotColor = theme === 'dark'
+            const dotColor = isDark
                 ? new THREE.Color(0, 0, 0)
                 : new THREE.Color(1, 1, 1);
 
@@ -77,11 +107,12 @@ export function DottedSurface({ className }: DottedSurfaceProps) {
                 }
             }
 
-            geometry = new THREE.BufferGeometry();
+            const geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             geometry.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+            geometryRef.current = geometry;
 
-            material = new THREE.PointsMaterial({
+            const material = new THREE.PointsMaterial({
                 size: 8,
                 vertexColors: true,
                 transparent: true,
@@ -129,25 +160,29 @@ export function DottedSurface({ className }: DottedSurfaceProps) {
             (renderer as any).__handleResize = handleResize;
         };
 
-        const timeout = setTimeout(init, 300);
+        init();
 
         return () => {
             cancelled = true;
-            clearTimeout(timeout);
             if (animationId) cancelAnimationFrame(animationId);
-            if (renderer?.__handleResize) {
-                window.removeEventListener('resize', renderer.__handleResize);
+            if (rendererRef.current?.__handleResize) {
+                window.removeEventListener('resize', rendererRef.current.__handleResize);
             }
-            geometry?.dispose();
-            material?.dispose();
-            if (renderer) {
-                renderer.dispose();
-                if (container.contains(renderer.domElement)) {
-                    container.removeChild(renderer.domElement);
+            geometryRef.current?.dispose();
+            geometryRef.current = null;
+            if (rendererRef.current) {
+                rendererRef.current.dispose();
+                if (container.contains(rendererRef.current.domElement)) {
+                    container.removeChild(rendererRef.current.domElement);
                 }
+                rendererRef.current = null;
             }
+            sceneRef.current = null;
+            cameraRef.current = null;
+            threeRef.current = null;
         };
-    }, [theme]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <div
@@ -163,32 +198,20 @@ interface ReadyToArchitectProps {
 }
 
 export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
-    const { theme } = useTheme();
-    const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setMounted(true);
-    }, []);
-
-    const currentTheme = mounted ? theme : "dark";
-
     return (
         <div className="w-full px-4 md:px-6 py-12 md:py-24">
             <m.section
                 style={{ opacity: ctaOpacity }}
                 className={cn(
                     "relative max-w-6xl mx-auto min-h-[550px] md:min-h-[500px] flex flex-col justify-center items-center text-center",
-                    "rounded-[2.5rem] md:rounded-[5rem] overflow-hidden isolate shadow-2xl border transition-colors duration-500",
-                    currentTheme === 'dark'
-                        ? "bg-white text-black border-black/5"
-                        : "bg-black text-white border-white/10"
+                    "rounded-[2.5rem] md:rounded-[5rem] overflow-hidden isolate shadow-2xl border",
+                    "bg-white text-black border-black/5 [html[data-theme='light']_&]:bg-black [html[data-theme='light']_&]:text-white [html[data-theme='light']_&]:border-white/10"
                 )}
             >
                 <DottedSurface className="z-[-1]" />
 
                 <div className="max-w-4xl mx-auto w-full px-6 md:px-8 py-16 md:py-20 flex flex-col items-center relative z-10">
-                    <div className="mb-4 inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-black/10 dark:bg-white/10">
+                    <div className="mb-4 inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-black/10 [html[data-theme='light']_&]:bg-white/10">
                         <span>Open to AI/ML Opportunities</span>
                     </div>
 
@@ -227,10 +250,8 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                             <a
                                 href={`mailto:${PROFILE.email}`}
                                 className={cn(
-                                    "px-8 py-4 text-sm md:text-base font-bold rounded-full transition-all duration-300 flex items-center gap-2.5 shadow-xl active:scale-95",
-                                    currentTheme === 'dark'
-                                        ? "bg-black text-white hover:bg-zinc-800"
-                                        : "bg-white text-black hover:bg-zinc-200"
+                                    "px-8 py-4 text-sm md:text-base font-bold rounded-full flex items-center gap-2.5 shadow-xl active:scale-95",
+                                    "bg-black text-white hover:bg-zinc-800 [html[data-theme='light']_&]:bg-white [html[data-theme='light']_&]:text-black [html[data-theme='light']_&]:hover:bg-zinc-200"
                                 )}
                             >
                                 <Mail size={18} />
@@ -242,10 +263,8 @@ export function ReadyToArchitect({ ctaOpacity }: ReadyToArchitectProps) {
                             <Link
                                 href="/resume"
                                 className={cn(
-                                    "px-8 py-4 text-sm md:text-base font-bold rounded-full border transition-all duration-300 flex items-center gap-2 active:scale-95",
-                                    currentTheme === 'dark'
-                                        ? "border-black/20 text-black hover:bg-black/5"
-                                        : "border-white/20 text-white hover:bg-white/10"
+                                    "px-8 py-4 text-sm md:text-base font-bold rounded-full border flex items-center gap-2 active:scale-95",
+                                    "border-black/20 text-black hover:bg-black/5 [html[data-theme='light']_&]:border-white/20 [html[data-theme='light']_&]:text-white [html[data-theme='light']_&]:hover:bg-white/10"
                                 )}
                             >
                                 <span>View Resume</span>

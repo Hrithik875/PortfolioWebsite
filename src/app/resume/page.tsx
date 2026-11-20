@@ -1405,6 +1405,10 @@ async function build(refs: Refs, isStale: () => boolean): Promise<Teardown | nul
 
     hlDirty = true;
     dirty = true;
+    try {
+      hlRenderer.render(hlScene, hlCamera);
+      renderer.render(scene, camera);
+    } catch {}
   };
   const unsubscribeTheme = subscribeTheme(applyTheme);
 
@@ -1682,9 +1686,14 @@ export default function ResumePage() {
         <article className="rs-flat">
           <div className="rs-flat-logo-wrap">
             <img
-              src={theme === "dark" ? LOGO_DARK_SRC : LOGO_LIGHT_SRC}
+              src={LOGO_DARK_SRC}
               alt="Hrithik HM Logo"
-              className="rs-flat-logo"
+              className="rs-flat-logo rs-logo-dark"
+            />
+            <img
+              src={LOGO_LIGHT_SRC}
+              alt="Hrithik HM Logo"
+              className="rs-flat-logo rs-logo-light"
             />
           </div>
           {RESUME.map((b, i) => {
@@ -1736,12 +1745,26 @@ html.lenis, html.lenis body { height: auto; }
   background: var(--rs-bg);
   color: var(--rs-ink);
 }
+:root[data-theme="dark"] .rs-root,
 .rs-root[data-rs-theme="dark"] {
   --rs-bg: ${THEMES.dark.bg};
   --rs-ink: ${THEMES.dark.ink};
   --rs-paper: ${THEMES.dark.paper};
   --rs-paper-ink: ${THEMES.dark.paperText};
 }
+:root[data-theme="light"] .rs-root {
+  --rs-bg: ${THEMES.light.bg};
+  --rs-ink: ${THEMES.light.ink};
+  --rs-paper: #f4f4f4;
+  --rs-paper-ink: ${THEMES.light.paperText};
+}
+
+.rs-logo-dark { display: none; }
+.rs-logo-light { display: block; }
+:root[data-theme="dark"] .rs-logo-dark,
+.rs-root[data-rs-theme="dark"] .rs-logo-dark { display: block; }
+:root[data-theme="dark"] .rs-logo-light,
+.rs-root[data-rs-theme="dark"] .rs-logo-light { display: none; }
 
 .rs-section { position: relative; width: 100%; min-height: 530svh; background: var(--rs-bg); }
 
