@@ -557,6 +557,7 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
     raf: 0,
     level: 0,
     small: false,
+    soft: false, // true when we had to fall back from the strict context
     reduced: false,
     scrollUntil: 0,
     lastClick: 0,
@@ -616,15 +617,22 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
   };
 
   const initGL = (canvas: HTMLCanvasElement) => {
-    const gl = canvas.getContext("webgl2", {
+    const attrs: WebGLContextAttributes = {
       alpha: false,
       depth: false,
       stencil: false,
       antialias: false,
       preserveDrawingBuffer: false,
       powerPreference: S.current.small ? "low-power" : "high-performance",
-      failIfMajorPerformanceCaveat: true, // never fall back to slow software rendering
-    });
+    };
+    // Prefer a hardware context; if the browser refuses, take whatever it
+    // offers but render much smaller so it stays cheap.
+    let gl = canvas.getContext("webgl2", { ...attrs, failIfMajorPerformanceCaveat: true });
+    S.current.soft = false;
+    if (!gl) {
+      gl = canvas.getContext("webgl2", attrs);
+      S.current.soft = !!gl;
+    }
     if (!gl) return false;
 
     const compile = (type: number, src: string) => {
@@ -830,7 +838,7 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
 
     // slow breathing at steady state (off by default on small devices)
     const humProp = P.hum ?? hum;
-    const humAmt = s.reduced ? 0 : clamp(humProp ?? (s.small ? 0 : 1), 0, 3);
+    const humAmt = s.reduced ? 0 : clamp(humProp ?? (s.small || s.soft ? 0 : 1), 0, 3);
     if (humAmt > 0) {
       const tsec = s.clock / 1000;
       const breathe = 0.6 * Math.sin(tsec * 1.3) + 0.4 * Math.sin(tsec * 2.9 + 1.0);
@@ -961,7 +969,11 @@ export const NeonReveal = forwardRef<NeonRevealHandle, NeonRevealProps>(function
         if (dw < 1 && dh <= hTol) return;
       }
 
-      const scale = clamp(P.renderScale ?? renderScale ?? (s.small ? 0.5 : 1), 0.25, 1);
+      const scale = clamp(
+        P.renderScale ?? renderScale ?? (s.soft ? 0.3 : s.small ? 0.5 : 1),
+        0.25,
+        1
+      );
       const d = Math.min(window.devicePixelRatio || 1, P.dpr ?? 1) * scale;
       const cw = Math.max(1, Math.round(w * d));
       const ch = Math.max(1, Math.round(h * d));
