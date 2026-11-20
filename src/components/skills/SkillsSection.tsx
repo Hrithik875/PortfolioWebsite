@@ -104,6 +104,10 @@ const useIsoLayoutEffect =
 const EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 const RISE_DURATION = 1350;
 
+// How far the heading is pushed down when hidden. It is larger than 110% because
+// the clip wrapper below has extra bottom padding (so descenders are not cut off).
+const HEADING_HIDDEN = "150%";
+
 const prefersReduced = () =>
   typeof window !== "undefined" &&
   (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
@@ -137,6 +141,16 @@ const paragraphStyle: CSSProperties = {
   margin: 0,
 };
 
+// The heading is revealed by sliding it up inside an overflow:hidden wrapper.
+// That wrapper used to cut off descenders (the "y" in Playground) and the edge of the
+// italic glyphs. The padding below gives the glyphs room and the equal negative margin
+// cancels it out, so the layout does not move at all.
+const headingClipStyle: CSSProperties = {
+  overflow: "hidden",
+  padding: "8px 12px 20px",
+  margin: "-8px -12px -20px",
+};
+
 export function SkillsSection({ className = "" }: { className?: string }) {
   const sectionRef = useRef<HTMLElement>(null);
   const headingClipRef = useRef<HTMLDivElement>(null);
@@ -167,7 +181,7 @@ export function SkillsSection({ className = "" }: { className?: string }) {
     }
 
     // Pre-hide elements before viewport entry
-    headingInner.style.transform = "translateY(110%)";
+    headingInner.style.transform = `translateY(${HEADING_HIDDEN})`;
     headingInner.style.opacity = "0";
     paraInner.style.transform = "translateY(110%)";
     paraInner.style.opacity = "0";
@@ -242,7 +256,7 @@ export function SkillsSection({ className = "" }: { className?: string }) {
       timers.push(
         window.setTimeout(() => {
           headingInner.style.transition = `transform 650ms ${EASE}, opacity 550ms ease`;
-          headingInner.style.transform = "translateY(110%)";
+          headingInner.style.transform = `translateY(${HEADING_HIDDEN})`;
           headingInner.style.opacity = "0";
         }, 70)
       );
@@ -272,9 +286,19 @@ export function SkillsSection({ className = "" }: { className?: string }) {
     // Initial check on mount
     check();
 
+    // On phones the browser address bar shows/hides while scrolling, which fires
+    // `resize` with only the height changed. Ignore those so they don't re-run the
+    // reveal logic mid-scroll; only react to real width changes (rotation, window resize).
+    let lastWidth = window.innerWidth;
+    const onResize = () => {
+      if (window.innerWidth === lastWidth) return;
+      lastWidth = window.innerWidth;
+      check();
+    };
+
     // Listen to native scroll & resize
     window.addEventListener("scroll", check, { passive: true });
-    window.addEventListener("resize", check, { passive: true });
+    window.addEventListener("resize", onResize, { passive: true });
 
     // Also listen to Lenis smooth scroll if present
     const win = window as unknown as {
@@ -289,7 +313,7 @@ export function SkillsSection({ className = "" }: { className?: string }) {
       cancelAnimationFrame(rafId);
       clearAllTimers();
       window.removeEventListener("scroll", check);
-      window.removeEventListener("resize", check);
+      window.removeEventListener("resize", onResize);
       win.__lenis?.off("scroll", check);
     };
   }, []);
@@ -304,10 +328,10 @@ export function SkillsSection({ className = "" }: { className?: string }) {
       <div className="skills-layout">
         {/* ── LEFT PANEL: 35% desktop, full width mobile ── */}
         <div className="skills-left-panel">
-          {/* Heading with overflow-hidden clip */}
+          {/* Heading with overflow-hidden clip (padded so descenders are not cut) */}
           <div
             ref={headingClipRef}
-            style={{ overflow: "hidden" }}
+            style={headingClipStyle}
           >
             <h2
               ref={headingInnerRef}
@@ -341,7 +365,13 @@ export function SkillsSection({ className = "" }: { className?: string }) {
         <div
           ref={menuWrapRef}
           className="skills-right-panel"
-          style={{ position: "relative" }}
+          style={{
+            position: "relative",
+            // Vertical page scrolling stays native over the menu; the menu only
+            // reacts to deliberate taps, never to a scroll gesture.
+            touchAction: "pan-y",
+            WebkitTapHighlightColor: "transparent",
+          }}
         >
           <FlowingMenu
             items={SKILL_ITEMS}
@@ -363,6 +393,7 @@ export function SkillsSection({ className = "" }: { className?: string }) {
             imageLayout="group"
             intro
             triggerIntro={triggerMenuIntro}
+            touchIntroSweep="once"
             ariaLabel="Skills"
             textColor="var(--text-primary)"
             bgColor="var(--background)"

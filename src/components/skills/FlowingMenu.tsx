@@ -55,6 +55,14 @@ export interface FlowingMenuProps {
   intro?: boolean;
   /** When provided, intro animation is controlled by parent instead of internal viewport observer. */
   triggerIntro?: boolean;
+  /**
+   * Touch / non-desktop only. Controls the automatic band sweep that follows the intro:
+   * - 'once'   : sweep only the first time the menu enters view (default)
+   * - 'always' : sweep every time the intro replays
+   * - 'never'  : never sweep on touch devices, the band only moves when a row is tapped
+   * Desktop behaviour is unchanged.
+   */
+  touchIntroSweep?: 'once' | 'always' | 'never';
   activeIndex?: number;
   onItemClick?: (item: FlowingMenuItem, index: number, event: ReactMouseEvent<HTMLElement>) => void;
   ariaLabel?: string;
@@ -66,6 +74,10 @@ interface Row {
   item?: HTMLLIElement | null;
   band?: HTMLDivElement | null;
   track?: HTMLDivElement | null;
+  /** Last values written to the DOM, used to skip redundant style writes. */
+  vis?: string;
+  clip?: string;
+  tx?: string;
 }
 
 interface Marquee {
@@ -78,12 +90,20 @@ interface Marquee {
 interface Metric {
   top: number;
   height: number;
+  width: number;
 }
 
 const DIRECTIONS = ['left', 'right', 'alternate'];
 const SHAPES = ['pill', 'rounded', 'circle'];
 const LAYOUTS = ['group', 'interleave'];
 const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
+
+/** A touch counts as a tap only if the finger moves less than this many px... */
+const TAP_SLOP = 10;
+/** ...and lifts within this many ms. */
+const TAP_MAX_MS = 600;
+/** Horizontal padding of each row on non-desktop screens. Also used for the font-fit calculation. */
+const COMPACT_PAD = 'clamp(20px, 6cqw, 40px)';
 
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -124,6 +144,7 @@ function FlowingMenu({
   imageLayout = 'group',
   intro = true,
   triggerIntro,
+  touchIntroSweep = 'once',
   activeIndex,
   onItemClick,
   ariaLabel = 'Menu',
@@ -162,17 +183,26 @@ function FlowingMenu({
   const [slots, setSlots] = useState([-1, -1]);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /** True below the desktop breakpoint (matches isDesktop(): innerWidth < 1024). */
+  const [compact, setCompact] = useState(false);
+  /** Tracks a single in-flight touch so we can tell a tap from a scroll gesture. */
+  const touchRef = useRef<{ id: number; x: number; y: number; t: number; moved: boolean } | null>(null);
+  /** Whether the automatic touch sweep has already played once. */
+  const sweptRef = useRef(false);
+
   const settings = {
     speed: Math.max(0, speed),
     direction: DIRECTIONS.includes(direction) ? direction : 'left',
     followCursor: clamp(followCursor, 0, 1),
-    duration: Math.max(0.1, duration),
-    stretch: clamp(stretch, 0, 1),
+    // Slightly softer spring on non-desktop: less overshoot and a touch slower so it stays smooth on phones.
+    duration: Math.max(0.1, duration) * (compact ? 1.15 : 1),
+    stretch: clamp(stretch, 0, 1) * (compact ? 0.75 : 1),
     magnet: clamp(magnet, 0, 1),
     bandInset: Math.max(0, bandInset),
     bandRadius: Math.max(0, bandRadius),
     carryContent,
     dimInactive,
+    touchIntroSweep,
     onItemClick
   };
   const settingsRef = useRef(settings);
@@ -181,6 +211,31 @@ function FlowingMenu({
   const marqueeAt = (index: number) => {
     if (!marquees.current[index]) marquees.current[index] = { x: 0, part: 0, spin: 0, covered: false };
     return marquees.current[index];
+  };
+
+  /** Writes band styles only when they actually changed. */
+  const writeBand = (row: Row, visibility: string, clipPath?: string) => {
+    const el = row.band;
+    if (!el) return;
+    if (row.vis !== visibility) {
+      el.style.visibility = visibility;
+      row.vis = visibility;
+    }
+    if (clipPath !== undefined && row.clip !== clipPath) {
+      el.style.clipPath = clipPath;
+      row.clip = clipPath;
+    }
+  };
+
+  /** Writes the marquee track transform only when it actually changed. */
+  const writeTrack = (row: Row, x: number) => {
+    const el = row.track;
+    if (!el) return;
+    const tx = `translate3d(${x.toFixed(2)}px, 0, 0)`;
+    if (row.tx !== tx) {
+      el.style.transform = tx;
+      row.tx = tx;
+    }
   };
 
   const insetFor = (height: number) => Math.min(settingsRef.current.bandInset, Math.max(0, height / 2 - 2));
@@ -257,15 +312,19 @@ function FlowingMenu({
       const from = Math.max(b.top, m.top);
       const to = Math.min(b.bottom, m.top + m.height);
       if (s.carryContent || !b.shown || to - from < 0.25) {
-        row.band.style.visibility = 'hidden';
+        writeBand(row, 'hidden');
       } else {
         const side = Math.min(s.bandInset, Math.max(0, m.height / 2 - 2));
-        const radius = Math.min(s.bandRadius, height / 2, Math.max(0, (row.item?.clientWidth ?? 0) / 2 - side));
-        row.band.style.visibility = 'visible';
-        row.band.style.clipPath = `inset(${(b.top - m.top).toFixed(2)}px ${side}px ${(m.top + m.height - b.bottom).toFixed(2)}px ${side}px round ${radius.toFixed(2)}px)`;
+        // m.width is measured once in measure(), so no layout reads happen inside the animation loop.
+        const radius = Math.min(s.bandRadius, height / 2, Math.max(0, m.width / 2 - side));
+        writeBand(
+          row,
+          'visible',
+          `inset(${(b.top - m.top).toFixed(2)}px ${side}px ${(m.top + m.height - b.bottom).toFixed(2)}px ${side}px round ${radius.toFixed(2)}px)`
+        );
         state.covered = (to - from) / m.height > 0.04;
       }
-      if (row.track) row.track.style.transform = `translate3d(${state.x.toFixed(2)}px, 0, 0)`;
+      writeTrack(row, state.x);
     });
     if (s.carryContent) paintFloat();
     else if (floatRef.current) floatRef.current.style.visibility = 'hidden';
@@ -446,7 +505,7 @@ function FlowingMenu({
   const measure = () => {
     const list = listRef.current;
     metrics.current = rows.current.map(row =>
-      row?.item ? { top: row.item.offsetTop, height: row.item.offsetHeight } : null
+      row?.item ? { top: row.item.offsetTop, height: row.item.offsetHeight, width: row.item.offsetWidth } : null
     );
     if (list && metrics.current[0]) {
       const height = metrics.current[0].height;
@@ -482,6 +541,20 @@ function FlowingMenu({
   const measureRef = useRef(measure);
   measureRef.current = measure;
 
+  // Track the desktop / non-desktop breakpoint in state so styles can adapt at render time.
+  useIsoLayoutEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const mq = window.matchMedia('(max-width: 1023.98px)');
+    const update = () => setCompact(mq.matches);
+    update();
+    if (mq.addEventListener) {
+      mq.addEventListener('change', update);
+      return () => mq.removeEventListener('change', update);
+    }
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
+
   useIsoLayoutEffect(() => {
     measureRef.current();
     const root = rootRef.current;
@@ -493,7 +566,7 @@ function FlowingMenu({
       if (part) observer.observe(part);
     });
     return () => observer.disconnect();
-  }, [items, bandInset, imageLayout]);
+  }, [items, bandInset, imageLayout, compact]);
 
   useIsoLayoutEffect(() => {
     rows.current.length = items.length;
@@ -569,9 +642,20 @@ function FlowingMenu({
 
       const loop = engine.current;
       const count = rows.current.filter(Boolean).length;
+      const touchMode = !isDesktop();
+
+      // On touch devices the automatic band sweep is optional, so scrolling up and down
+      // the page doesn't keep replaying it. Desktop always sweeps.
+      const sweepMode = settingsRef.current.touchIntroSweep;
+      const allowSweep =
+        !touchMode || sweepMode === 'always' || (sweepMode === 'once' && !sweptRef.current);
+      if (!allowSweep) return;
+      if (touchMode) sweptRef.current = true;
+
       // Sweep band across rows after category text headers have cleanly risen
       const start = 1100 + count * 50;
-      const step = 260;
+      // Slower steps on touch devices so every row settles before the next one starts.
+      const step = touchMode ? 320 : 260;
 
       for (let index = 0; index < count; index++) {
         loop.timers.push(
@@ -584,7 +668,7 @@ function FlowingMenu({
         );
       }
 
-      if (!isDesktop()) {
+      if (touchMode) {
         loop.timers.push(
           setTimeout(
             () => {
@@ -643,10 +727,7 @@ function FlowingMenu({
       b.shown = false;
       b.index = -1;
       rows.current.forEach(r => {
-        if (r?.band) {
-          r.band.style.clipPath = 'inset(50% 0 50% 0)';
-          r.band.style.visibility = 'hidden';
-        }
+        if (r?.band) writeBand(r, 'hidden', 'inset(50% 0 50% 0)');
       });
     };
 
@@ -699,6 +780,15 @@ function FlowingMenu({
     };
   }, []);
 
+  // If the page scrolls while a finger is down, that touch is a scroll gesture, not a tap.
+  useEffect(() => {
+    const cancelTap = () => {
+      if (touchRef.current) touchRef.current.moved = true;
+    };
+    window.addEventListener('scroll', cancelTap, { passive: true });
+    return () => window.removeEventListener('scroll', cancelTap);
+  }, []);
+
   const onPointerMove = (event: ReactPointerEvent<HTMLUListElement>) => {
     if (event.pointerType === 'touch') return;
     if (leaveTimerRef.current) {
@@ -749,10 +839,37 @@ function FlowingMenu({
   };
 
   const linkHandlers = (item: FlowingMenuItem, index: number) => ({
+    // Touch: remember where the finger went down. The band does NOT move yet,
+    // because the user may be starting a scroll.
     onPointerDown: (event: ReactPointerEvent<HTMLElement>) => {
       if (event.pointerType !== 'touch') return;
+      touchRef.current = {
+        id: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        t: performance.now(),
+        moved: false
+      };
+    },
+    onPointerMove: (event: ReactPointerEvent<HTMLElement>) => {
+      if (event.pointerType !== 'touch') return;
+      const t = touchRef.current;
+      if (!t || t.id !== event.pointerId || t.moved) return;
+      if (Math.hypot(event.clientX - t.x, event.clientY - t.y) > TAP_SLOP) t.moved = true;
+    },
+    // Touch: only a quick, stationary press-and-release counts as a tap.
+    onPointerUp: (event: ReactPointerEvent<HTMLElement>) => {
+      if (event.pointerType !== 'touch') return;
+      const t = touchRef.current;
+      touchRef.current = null;
+      if (!t || t.id !== event.pointerId || t.moved) return;
+      if (performance.now() - t.t > TAP_MAX_MS) return;
       stopIntro();
       goTo(index, halfOf(event.clientY, index));
+    },
+    // The browser took over the gesture (it is scrolling), so this was never a tap.
+    onPointerCancel: () => {
+      touchRef.current = null;
     },
     onFocus: (event: ReactFocusEvent<HTMLElement>) => {
       if (!event.currentTarget.matches(':focus-visible')) return;
@@ -851,6 +968,11 @@ function FlowingMenu({
     );
   };
 
+  // Longest label decides how small the text must be to fit a narrow row.
+  // 0.56em per character is a conservative average glyph width at this weight and tracking.
+  const longestLabel = items.reduce((max, item) => Math.max(max, Array.from(item.text).length), 0);
+  const fitEm = Math.max(6, longestLabel * 0.56 + 0.4);
+
   // Inline styles replacing Tailwind classes that don't work reliably in Tailwind v4
   const rootStyle: CSSProperties = {
     position: 'relative',
@@ -872,6 +994,8 @@ function FlowingMenu({
     listStyle: 'none',
     flexDirection: 'column',
     padding: 0,
+    // Let the browser own vertical scrolling so a scroll gesture never counts as a tap.
+    touchAction: 'pan-y',
   };
 
   const itemStyle: CSSProperties = {
@@ -900,18 +1024,27 @@ function FlowingMenu({
     height: '100%',
     width: '100%',
     cursor: 'pointer',
-    gridTemplateColumns: align === 'left' ? 'auto 1fr auto' : '1fr auto 1fr',
+    gridTemplateColumns: compact
+      ? align === 'left'
+        ? 'auto minmax(0, 1fr) auto'
+        : 'minmax(0, 1fr) auto minmax(0, 1fr)'
+      : align === 'left'
+        ? 'auto 1fr auto'
+        : '1fr auto 1fr',
     alignItems: 'center',
-    gap: '1rem',
+    gap: compact ? '0.5rem' : '1rem',
     border: 0,
     background: 'transparent',
-    padding: '0 clamp(16px, 4cqw, 40px)',
+    padding: compact ? `0 ${COMPACT_PAD}` : '0 clamp(16px, 4cqw, 40px)',
     textAlign: 'left',
     color: 'inherit',
     textDecoration: 'none',
     outline: 'none',
     transition: 'opacity 450ms ease',
     WebkitTapHighlightColor: 'transparent',
+    WebkitTouchCallout: 'none',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
     font: 'inherit',
   };
 
@@ -928,9 +1061,16 @@ function FlowingMenu({
     alignItems: 'center',
     gap: '0.28em',
     justifySelf: align === 'left' ? 'start' : 'center',
+    minWidth: 0,
+    maxWidth: '100%',
     overflow: 'hidden',
-    padding: '0.25em 0 0.35em 0',
-    fontSize: 'clamp(16px, 40cqh, 140px)',
+    // Small side padding so the tight negative letter-spacing never clips the first/last glyph.
+    padding: '0.25em 0.1em 0.35em 0.1em',
+    // Desktop: sized by row height only (unchanged).
+    // Non-desktop: also capped by row width so the longest label always fits inside the padding.
+    fontSize: compact
+      ? `clamp(14px, min(40cqh, calc((100cqw - 2 * ${COMPACT_PAD}) / ${fitEm.toFixed(2)})), 140px)`
+      : 'clamp(16px, 40cqh, 140px)',
     lineHeight: 1.25,
     fontWeight: 500,
     letterSpacing: '-0.035em',
@@ -973,6 +1113,9 @@ function FlowingMenu({
     zIndex: 1,
     overflow: 'hidden',
     clipPath: 'inset(50% 0 50% 0)',
+    // Hint the compositor that the clip changes every frame while the band moves.
+    willChange: 'clip-path',
+    contain: 'paint',
   };
 
   const trackStyle: CSSProperties = {
