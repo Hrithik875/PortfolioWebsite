@@ -70,6 +70,7 @@ export function About() {
   const heavyRef = useRef<HTMLDivElement>(null);
   const headline = useRef<HTMLHeadingElement>(null);
   const textBlock = useRef<HTMLDivElement>(null);
+  const paraRef = useRef<HTMLParagraphElement>(null);
 
   const words = useMemo(() => buildWords(about.headline), []);
   const plainHeadline = about.headline.map((p) => p.text).join("");
@@ -81,7 +82,7 @@ export function About() {
 
       const rootEl = root.current!, bgEl = bg.current!, wrapEl = wrap.current!;
       const sharpEl = sharpRef.current!, midEl = midRef.current!, heavyEl = heavyRef.current!;
-      const head = headline.current!, block = textBlock.current!;
+      const head = headline.current!, block = textBlock.current!, paraEl = paraRef.current!;
 
       const coarse = isCoarse();
       // On touch devices scroll is native and runs on its own thread; any extra scrub smoothing
@@ -222,41 +223,29 @@ export function About() {
         };
       });
 
+      // MOBILE / SMALL SCREENS: no parallax, no blur. The portrait sits in the normal page flow and
+      // simply fades in (opacity only, scrubbed 1:1 with scroll) once the text above it has revealed,
+      // the same way the headline and paragraph do. Opacity on one layer is compositor-only work.
       mm.add("(max-width: 1023px)", () => {
         const stage = rail.current!;        // in-flow container, never transformed -> stable trigger
-
-        // scroll distance until the lagging portrait has left the top of the screen
-        const lagDist = () => (0.7 * vh() + wrapEl.offsetHeight) / T.mImageSpeed;
-
-        // A) parallax lag: portrait drifts at T.mImageSpeed x page speed (locked 1:1 to scroll)
         gsap.fromTo(
           wrapEl,
-          { y: 0 },
+          { opacity: 0 },
           {
-            y: () => (1 - T.mImageSpeed) * lagDist(),
+            opacity: 1,
             ease: "none",
-            force3D: true,
             scrollTrigger: {
-              trigger: stage, start: "top 70%", end: () => `+=${lagDist()}`,
+              trigger: stage, start: "top 92%", end: "top 62%",
               scrub: scrubT, invalidateOnRefresh: true,
             },
           }
         );
-
-        // B) blur + page-colour fade clear as the portrait nears the top
-        //    (capped radius: a static blur is cheap on the GPU, a huge one is not, on phones)
-        const undoReveal = revealImage(
-          "power2.in",
-          { trigger: stage, start: "top 98%", end: () => `+=${1.16 * vh()}`, scrub: scrubT, invalidateOnRefresh: true },
-          Math.min(T.mImageBlur, 28)
-        );
-
-        return () => { undoReveal(); };
       });
 
-      // 4 ─ HEADLINE: per-line blur + opacity reveal.
-      //     Desktop: starts later (top 60%) so line 1 becomes fully clear close to the middle of the viewport.
-      //     Mobile: keeps original responsive timing (top 85%).
+      // 4 ─ HEADLINE: per-line reveal.
+      //     Desktop: per-line blur + opacity, starts later (top 60%) so line 1 becomes fully clear close to
+      //     the middle of the viewport.
+      //     Mobile: per-line OPACITY ONLY (no blur, no movement), staggered line by line, scrubbed to scroll.
       const isMobile = () => window.innerWidth <= 1023;
       const wordEls = gsap.utils.toArray<HTMLElement>(head.querySelectorAll("[data-word]"));
       let headTl: gsap.core.Timeline | null = null;
@@ -279,16 +268,18 @@ export function About() {
           const at = i * T.lineStagger;
           // opacity and blur are separate tweens so blur can be stepped on touch devices
           tl.fromTo(line, { opacity: 0 }, { opacity: 1, ease: "none", duration: 1 }, at);
-          tl.fromTo(line, { filter: blur(T.textBlur) }, { filter: blur(0), ease: stepEase, duration: 1 }, at);
+          if (!mobile) {
+            tl.fromTo(line, { filter: blur(T.textBlur) }, { filter: blur(0), ease: stepEase, duration: 1 }, at);
+          }
         });
         tl.eventCallback("onUpdate", () => setReveal(head, tl.progress()));
         setReveal(head, 0);
         headTl = tl;
       };
 
-      // 5 ─ PARAGRAPH + INFO: one block, blur + opacity in
-      //     Mobile: reveals only after the last line of the first paragraph is completely clear.
-      //     Desktop: reveals with independent trigger in page flow.
+      // 5 ─ PARAGRAPH (+ INFO on desktop)
+      //     Mobile: only the paragraph fades in (opacity only, no blur), after the last headline line is clear.
+      //     Desktop: paragraph + INFO as one block, blur + opacity, independent trigger in page flow.
       const buildParagraph = () => {
         blockTl?.scrollTrigger?.kill(true);
         blockTl?.kill();
@@ -301,11 +292,18 @@ export function About() {
               invalidateOnRefresh: true,
             }
           : { trigger: block, start: "top 92%", end: "top 62%", scrub: scrubT };
+        // clear whatever a previous build (other breakpoint) left behind on either target
+        gsap.set([block, paraEl], { clearProps: "opacity,filter" });
+        delete block.dataset.reveal;
+        delete paraEl.dataset.reveal;
+        const target = mobile ? paraEl : block;
         const tl = gsap.timeline({ scrollTrigger: st });
-        tl.fromTo(block, { opacity: 0 }, { opacity: 1, ease: "none", duration: 1 }, 0);
-        tl.fromTo(block, { filter: blur(T.paraBlur) }, { filter: blur(0), ease: stepEase, duration: 1 }, 0);
-        tl.eventCallback("onUpdate", () => setReveal(block, tl.progress()));
-        setReveal(block, 0);
+        tl.fromTo(target, { opacity: 0 }, { opacity: 1, ease: "none", duration: 1 }, 0);
+        if (!mobile) {
+          tl.fromTo(target, { filter: blur(T.paraBlur) }, { filter: blur(0), ease: stepEase, duration: 1 }, 0);
+        }
+        tl.eventCallback("onUpdate", () => setReveal(target, tl.progress()));
+        setReveal(target, 0);
         blockTl = tl;
       };
 
@@ -341,6 +339,7 @@ export function About() {
         blockTl?.kill();
         delete head.dataset.reveal;
         delete block.dataset.reveal;
+        delete paraEl.dataset.reveal;
       };
     },
     { scope: root }
@@ -381,7 +380,7 @@ export function About() {
         </h2>
 
         <div ref={textBlock} className={s.textBlock}>
-          <p className={s.paragraph}>{about.paragraph}</p>
+          <p ref={paraRef} className={s.paragraph}>{about.paragraph}</p>
           <a href={about.info.href} className={s.info}>{about.info.label}</a>
         </div>
       </div>

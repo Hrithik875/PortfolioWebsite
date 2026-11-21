@@ -227,6 +227,9 @@
   .root { height: auto; padding-bottom: 80vh; }   /* black gap before the next section */
   .content { padding-top: 28vh; }
 
+  /* No backdrop blur on mobile: just the colour tint dissolves the hero into the section. */
+  .featherBlur { display: none; }
+
   .headline {
     margin: 0 0 0 5.5vw; max-width: 89vw;
     font-size: 6.9vw; line-height: 1.38; font-weight: 450; letter-spacing: -0.02em;
@@ -236,21 +239,29 @@
 
   .textBlock { margin: 11vw 0 0 5.5vw; width: 89vw; min-width: 0; }
   .paragraph { font-size: 3.3vw; line-height: 1.6; font-weight: 480; letter-spacing: -0.005em; }
-  .info { font-size: 3.7vw; margin-top: 15vw; }
+  .info { font-size: 3.7vw; margin-top: 7vw; }   /* tighter: there is no parallax drift to make room for */
 
-  /* portrait: in the flow, under INFO */
+  /* Mobile reveal = opacity only (no filter). Layers are promoted only while a fade is in progress. */
+  .headline[data-reveal="active"] .word,
+  .paragraph[data-reveal="active"] { will-change: opacity; }
+
+  /* portrait: in the flow, under INFO, no parallax, no blur */
   .imageFixed {
     position: relative; top: auto; right: auto;
     width: 100%; height: auto;
-    margin-top: 3vw; padding: 0 5.5vw; box-sizing: border-box;
+    margin-top: 9vw; padding: 0 5.5vw; box-sizing: border-box;
     z-index: 1;
   }
   .imageWrap {
     position: relative; top: auto; right: auto;
     width: 100%; height: auto; aspect-ratio: 5 / 6;
     transform: none;                 /* cancels the desktop "parked off-screen" transform */
+    opacity: 0;                      /* GSAP fades it 0 → 1 with scroll (one compositor-only layer) */
+    will-change: opacity;
   }
   .imageClip { right: 0; border-radius: 25vw 25vw 0 0; }   /* arch, square bottom */
+  .imageSharp { opacity: 1; will-change: auto; }            /* the only layer on mobile: always the sharp image */
+  .blurMid, .blurHeavy { display: none; }                   /* pre-blurred copies are desktop-only */
   .image { object-position: 50% 22%; }                      /* tune so the face is framed like the reference */
 }
 
