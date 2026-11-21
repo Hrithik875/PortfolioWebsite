@@ -1,7 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "lenis/dist/lenis.css";
-import { Instrument_Serif, Inter_Tight, Public_Sans, Spectral } from "next/font/google";
+import {
+  Space_Grotesk,
+  DM_Sans,
+  Public_Sans,
+  Spectral,
+  Instrument_Serif,
+  Inter_Tight,
+} from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { IntroProvider } from "@/context/IntroContext";
 import { LenisProvider } from "@/components/LenisProvider";
@@ -11,26 +18,41 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PreventZoom } from "@/components/PreventZoom";
 import { Analytics } from '@vercel/analytics/next';
 
+// Space Grotesk — primary site font for body, headings, and UI chrome
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space-grotesk",
+  display: "block",
+});
+
+// DM Sans — used by the IntroReveal and Halftone card titles
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  variable: "--font-dm-sans",
+  display: "block",
+});
+
 const serif = Instrument_Serif({
   subsets: ["latin"],
   weight: "400",
-  style: "italic",
+  style: ["normal", "italic"],
   variable: "--font-serif",
-  display: "swap",
+  display: "block",
 });
 
-// Inter Tight — tight neo-grotesk used by the About headline and paragraph.
+// Inter Tight — tight neo-grotesk
 const sans = Inter_Tight({
   subsets: ["latin"],
   variable: "--font-sans-tight",
-  display: "swap",
+  display: "block",
 });
 
 // Public Sans is a variable font on Google Fonts: omit `weight` so font-weight 480 works.
 const aboutSans = Public_Sans({
   subsets: ["latin"],
   variable: "--font-about-sans",
-  display: "swap",
+  display: "block",
 });
 
 const aboutSerif = Spectral({
@@ -38,7 +60,7 @@ const aboutSerif = Spectral({
   weight: ["400", "600", "700"],
   style: "italic",
   variable: "--font-about-serif",
-  display: "swap",
+  display: "block",
 });
 
 export const viewport: Viewport = {
@@ -71,8 +93,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`intro-loading ${sans.variable} ${aboutSans.variable} ${aboutSerif.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`intro-loading ${spaceGrotesk.variable} ${dmSans.variable} ${aboutSans.variable} ${aboutSerif.variable} ${serif.variable} ${sans.variable}`}
+    >
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@300..700&display=block"
+          rel="stylesheet"
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `

@@ -224,7 +224,7 @@
 .info:hover { color: rgb(var(--about-fg, 240, 240, 240)); }
 
 @media (max-width: 1023px) {
-  .root { height: auto; padding-bottom: 80vh; }   /* black gap before the next section */
+  .root { height: auto; padding-bottom: 30vw; }   /* small breathing room before the next section (the old 80vh only made room for the image's parallax drift) */
   .content { padding-top: 28vh; }
 
   /* No backdrop blur on mobile: just the colour tint dissolves the hero into the section. */
@@ -259,10 +259,12 @@
     opacity: 0;                      /* GSAP fades it 0 → 1 with scroll (one compositor-only layer) */
     will-change: opacity;
   }
-  .imageClip { right: 0; border-radius: 25vw 25vw 0 0; }   /* arch, square bottom */
+  /* The arch is applied to the <img> itself instead of an overflow:hidden + border-radius wrapper:
+     a rounded clip around a fading layer forces an extra mask pass on every frame of the fade. */
+  .imageClip { right: 0; overflow: visible; background: none; border-radius: 0; }
   .imageSharp { opacity: 1; will-change: auto; }            /* the only layer on mobile: always the sharp image */
   .blurMid, .blurHeavy { display: none; }                   /* pre-blurred copies are desktop-only */
-  .image { object-position: 50% 22%; }                      /* tune so the face is framed like the reference */
+  .image { border-radius: 25vw 25vw 0 0; object-position: 50% 22%; }   /* arch, square bottom; tune so the face is framed like the reference */
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -223,25 +223,6 @@ export function About() {
         };
       });
 
-      // MOBILE / SMALL SCREENS: no parallax, no blur. The portrait sits in the normal page flow and
-      // simply fades in (opacity only, scrubbed 1:1 with scroll) once the text above it has revealed,
-      // the same way the headline and paragraph do. Opacity on one layer is compositor-only work.
-      mm.add("(max-width: 1023px)", () => {
-        const stage = rail.current!;        // in-flow container, never transformed -> stable trigger
-        gsap.fromTo(
-          wrapEl,
-          { opacity: 0 },
-          {
-            opacity: 1,
-            ease: "none",
-            scrollTrigger: {
-              trigger: stage, start: "top 92%", end: "top 62%",
-              scrub: scrubT, invalidateOnRefresh: true,
-            },
-          }
-        );
-      });
-
       // 4 ─ HEADLINE: per-line reveal.
       //     Desktop: per-line blur + opacity, starts later (top 60%) so line 1 becomes fully clear close to
       //     the middle of the viewport.
@@ -307,9 +288,40 @@ export function About() {
         blockTl = tl;
       };
 
+      // 6 ─ PORTRAIT (mobile only): no parallax, no blur. It sits in the normal page flow and simply
+      //     fades in AFTER the paragraph has finished revealing (and never before it scrolls into view).
+      //     It is a short time-based fade that is merely *triggered* by scroll, so nothing is recalculated
+      //     per scroll frame and the fade can't stutter along with the scroll. Scrolling back up reverses it.
+      let imgTw: gsap.core.Tween | null = null;
+      const buildImage = () => {
+        imgTw?.scrollTrigger?.kill();
+        imgTw?.kill();
+        imgTw = null;
+        if (!isMobile()) return;                      // desktop owns the portrait wrapper
+        const stage = rail.current!;                  // in-flow container, never transformed -> stable trigger
+        imgTw = gsap.fromTo(
+          wrapEl,
+          { opacity: 0 },
+          {
+            opacity: 1, duration: 0.7, ease: "power1.out",
+            scrollTrigger: {
+              trigger: stage,
+              start: () => {
+                const stageTop = stage.getBoundingClientRect().top + window.scrollY;
+                const afterText = blockTl?.scrollTrigger ? blockTl.scrollTrigger.end : 0;
+                return Math.max(afterText, stageTop - 0.95 * vh());
+              },
+              toggleActions: "play none none reverse",
+              invalidateOnRefresh: true,
+            },
+          }
+        );
+      };
+
       const buildAll = () => {
         buildHeadline();
         buildParagraph();
+        buildImage();
       };
       buildAll();
 
@@ -337,6 +349,8 @@ export function About() {
         headTl?.kill();
         blockTl?.scrollTrigger?.kill(true);
         blockTl?.kill();
+        imgTw?.scrollTrigger?.kill();
+        imgTw?.kill();
         delete head.dataset.reveal;
         delete block.dataset.reveal;
         delete paraEl.dataset.reveal;

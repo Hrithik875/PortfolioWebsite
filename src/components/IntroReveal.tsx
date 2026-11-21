@@ -102,10 +102,10 @@ export function IntroReveal() {
         if (typeof document !== "undefined" && document.fonts) {
           await Promise.race([
             Promise.all([
-              document.fonts.load('700 100px "DM Sans"', "HRITHIK M"),
+              document.fonts.load('700 100px "DM Sans"', "HRITHIK M").catch(() => {}),
               document.fonts.ready,
             ]),
-            new Promise((resolve) => setTimeout(resolve, 1500)),
+            new Promise((resolve) => setTimeout(resolve, 2000)),
           ]);
         }
       } catch {
@@ -172,13 +172,17 @@ export function IntroReveal() {
         // Width of the sliding "M" at its START size (mobile only, used for clearance maths)
         let mStartWidth = 0;
 
+        // Read the exact computed webfont family from .intro-reveal
+        const introFontFamily =
+          (root ? getComputedStyle(root).fontFamily : null) || '"DM Sans", sans-serif';
+
         if (isMobile) {
           const targetWidth = window.innerWidth * 0.9;
           let fullWidthRatio = 5.1; // fallback: advance width of "HRITHIK M" per 1px font-size
           let mWidthRatio = 0.85; // fallback: advance width of "M" per 1px font-size
 
           if (mctx) {
-            mctx.font = `700 100px "DM Sans", sans-serif`;
+            mctx.font = `700 100px ${introFontFamily}`;
             const full = mctx.measureText("HRITHIK M").width;
             const m = mctx.measureText("M").width;
             if (full > 0) fullWidthRatio = full / 100;
@@ -228,12 +232,12 @@ export function IntroReveal() {
         let mStemThickness = M_SIZE * 0.115;
 
         if (mctx) {
-          mctx.font = `700 ${M_SIZE}px "DM Sans", sans-serif`;
+          mctx.font = `700 ${M_SIZE}px ${introFontFamily}`;
           const mMetrics = mctx.measureText("M");
           mWidth = mMetrics.width;
           mAscent = mMetrics.actualBoundingBoxAscent;
 
-          mctx.font = `700 ${H_SIZE}px "DM Sans", sans-serif`;
+          mctx.font = `700 ${H_SIZE}px ${introFontFamily}`;
           const hMetrics = mctx.measureText("H");
           hWidth = hMetrics.width;
 
@@ -242,7 +246,7 @@ export function IntroReveal() {
             const cSize = Math.ceil(M_SIZE);
             canvas.width = cSize;
             canvas.height = cSize;
-            mctx.font = `700 ${M_SIZE}px "DM Sans", sans-serif`;
+            mctx.font = `700 ${M_SIZE}px ${introFontFamily}`;
             mctx.fillStyle = "black";
             mctx.textBaseline = "top";
             mctx.fillText("M", 0, 0);
